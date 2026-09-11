@@ -3,6 +3,7 @@ import {getDailyStress} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyStress} from '../types/garmin.ts'
+import {GarminNav} from './GarminNav.tsx'
 
 function todayLocal(): string {
   const now = new Date()
@@ -59,7 +60,10 @@ export function StressPage() {
   return (
     <main className="page">
       <header className="topbar">
-        <h1>Daily stress</h1>
+        <div>
+          <h1>Daily stress</h1>
+          <GarminNav />
+        </div>
         <button type="button" className="ghost" onClick={logout}>
           Log out
         </button>

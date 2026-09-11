@@ -1,0 +1,10 @@
+import {NavLink} from 'react-router-dom'
+
+export function GarminNav() {
+  return (
+    <nav className="nav">
+      <NavLink to="/stress">Stress</NavLink>
+      <NavLink to="/heartrate">Heart rate</NavLink>
+    </nav>
+  )
+}

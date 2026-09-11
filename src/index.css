@@ -64,6 +64,26 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
+.nav {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+
+.nav a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: var(--text-h);
+}
+
+.nav a.active {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
 .card,
 .toolbar {
   display: flex;
@@ -149,4 +169,28 @@ button.ghost {
 .metrics strong {
   color: var(--text-h);
   font-family: var(--mono);
+}
+
+.samples {
+  margin-top: 1rem;
+  overflow: auto;
+  max-height: 24rem;
+}
+
+.samples table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.samples th,
+.samples td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.samples td {
+  font-family: var(--mono);
+  color: var(--text-h);
 }

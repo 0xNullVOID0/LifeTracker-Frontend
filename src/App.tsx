@@ -1,5 +1,6 @@
 import {Navigate, Route, Routes} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
+import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
 import {StressPage} from './pages/StressPage.tsx'
 import type {ReactNode} from 'react'
@@ -19,6 +20,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <StressPage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/heartrate"
+            element={
+              <RequireAuth>
+                <HeartRatePage />
               </RequireAuth>
             }
         />
