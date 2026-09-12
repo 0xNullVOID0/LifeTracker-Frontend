@@ -1,5 +1,16 @@
 import {useEffect, useState} from 'react'
-import {Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
 
 function useChartColors() {
@@ -22,7 +33,26 @@ function useChartColors() {
     light: dark ? '#b7a4d4' : '#6b5288',
     rem: dark ? '#d4c4ea' : '#9b87b5',
     awake: dark ? '#f97066' : '#b42318',
+    sleepBand: dark ? 'rgba(126, 184, 224, 0.18)' : 'rgba(42, 111, 151, 0.14)',
   }
+}
+
+export type SleepWindow = { start: number; end: number }
+
+function sleepRangesFromSamples(samples: { t: number; sleeping: boolean }[]): SleepWindow[] {
+  const ranges: SleepWindow[] = []
+  let start: number | null = null
+  for (const sample of samples) {
+    if (sample.sleeping && start === null) start = sample.t
+    if (!sample.sleeping && start !== null) {
+      ranges.push({ start, end: sample.t })
+      start = null
+    }
+  }
+  if (start !== null && samples.length > 0) {
+    ranges.push({ start, end: samples[samples.length - 1].t })
+  }
+  return ranges
 }
 
 function formatTickTime(value: number): string {
@@ -33,19 +63,49 @@ function formatTickDate(value: string): string {
   return value.slice(5)
 }
 
-export function HeartRateChart({ samples }: { samples: HeartRateSample[] }) {
+export function HeartRateChart({
+  samples,
+  sleepWindows = [],
+}: {
+  samples: HeartRateSample[]
+  sleepWindows?: SleepWindow[]
+}) {
   const colors = useChartColors()
-  const data = samples.map((sample) => ({
-    t: new Date(sample.timestamp).getTime(),
-    bpm: sample.bpm,
-  }))
+  const data = samples
+    .map((sample) => ({
+      t: new Date(sample.timestamp).getTime(),
+      sleeping: sample.sleeping,
+      bpm: sample.bpm,
+    }))
+    .filter((sample) => Number.isFinite(sample.t) && Number.isFinite(sample.bpm))
+    .sort((a, b) => a.t - b.t)
+  if (data.length === 0) return null
+  const bpms = data.map((sample) => sample.bpm)
+  const yMin = Math.max(0, Math.min(...bpms) - 4)
+  const yMax = Math.max(...bpms) + 4
+  const tMin = data[0].t
+  const tMax = data[data.length - 1].t
+  const overlapping = sleepWindows.filter((band) => tMin != null && tMax != null && band.end > tMin && band.start < tMax)
+  const bands = overlapping.length > 0 ? overlapping : sleepRangesFromSamples(data)
 
   return (
     <section className="card chart-card">
       <h2>BPM</h2>
+      <p className="chart-legend">
+        <span className="swatch sleep" /> Sleep
+      </p>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            {bands.map((band) => (
+              <ReferenceArea
+                key={`${band.start}-${band.end}`}
+                x1={band.start}
+                x2={band.end}
+                fill={colors.sleepBand}
+                ifOverflow="hidden"
+              />
+            ))}
             <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
             <XAxis
               dataKey="t"
@@ -56,17 +116,27 @@ export function HeartRateChart({ samples }: { samples: HeartRateSample[] }) {
               tick={{ fill: colors.text, fontSize: 12 }}
             />
             <YAxis
-              domain={[(min: number) => Math.max(0, Math.floor(min - 4)), (max: number) => Math.ceil(max + 4)]}
+              domain={[yMin, yMax]}
               allowDecimals={false}
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
               width={40}
             />
             <Tooltip
-              labelFormatter={(value) => formatTickTime(Number(value))}
-              formatter={(value) => [value ?? 0, 'BPM']}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.[0]) return null
+                const row = payload[0].payload as { sleeping?: boolean; bpm?: number }
+                return (
+                  <div className="chart-tooltip">
+                    <div>{formatTickTime(Number(label))}</div>
+                    <div>
+                      {String(payload[0].value)} BPM{row.sleeping ? ' · sleep' : ''}
+                    </div>
+                  </div>
+                )
+              }}
             />
-            <Line type="monotone" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.5} />
+            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.5} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -299,3 +299,42 @@ button.ghost {
 .chart-card .chart-short {
   height: 7rem;
 }
+
+.chart-legend {
+  display: flex;
+  gap: 1rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.35rem;
+  border-radius: 2px;
+  vertical-align: -0.1rem;
+}
+
+.swatch.awake {
+  background: var(--accent);
+}
+
+.swatch.sleep {
+  background: #2a6f97;
+}
+
+@media (prefers-color-scheme: dark) {
+  .swatch.sleep {
+    background: #7eb8e0;
+  }
+}
+
+.chart-tooltip {
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-h);
+}

@@ -24,3 +24,9 @@ export function toIsoDate(value: Date): string {
   const day = String(value.getDate()).padStart(2, '0')
   return `${value.getFullYear()}-${month}-${day}`
 }
+
+export function addDays(iso: string, days: number): string {
+  const next = fromIsoDate(iso)
+  next.setDate(next.getDate() + days)
+  return toIsoDate(next)
+}

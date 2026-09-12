@@ -1,9 +1,10 @@
 import {useEffect, useState} from 'react'
-import {getDailyHeartRate} from '../api/garmin.ts'
+import {getDailyHeartRate, getDailySleep} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {DailyHeartRate} from '../types/garmin.ts'
-import {HeartRateChart} from '../charts.tsx'
+import type {DailyHeartRate, DailySleep} from '../types/garmin.ts'
+import {HeartRateChart, type SleepWindow} from '../charts.tsx'
+import {addDays} from '../dates.ts'
 import {DatePicker} from '../DatePicker.tsx'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -14,10 +15,18 @@ function formatTimestamp(value: string): string {
   return parsed.toLocaleString()
 }
 
+function sleepWindowFromSleep(sleep: DailySleep): SleepWindow | null {
+  const start = new Date(sleep.startLocal).getTime()
+  const end = new Date(sleep.endLocal).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null
+  return { start, end }
+}
+
 export function HeartRatePage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [data, setData] = useState<DailyHeartRate | null>(null)
+  const [sleepWindows, setSleepWindows] = useState<SleepWindow[]>([])
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -30,18 +39,32 @@ export function HeartRatePage() {
       setError(null)
       setEmpty(false)
       try {
-        const result = await getDailyHeartRate(requestedDate)
+        const nextDate = addDays(requestedDate, 1)
+        const [heartOutcome, sleepToday, sleepTomorrow] = await Promise.allSettled([
+          getDailyHeartRate(requestedDate),
+          getDailySleep(requestedDate),
+          getDailySleep(nextDate),
+        ])
         if (cancelled) return
-        setData(result)
-        setEmpty(result === null)
-      } catch (caught) {
-        if (cancelled) return
-        setData(null)
-        if (caught instanceof ApiError) {
-          setError(caught.message)
+
+        if (heartOutcome.status === 'fulfilled') {
+          setData(heartOutcome.value)
+          setEmpty(heartOutcome.value === null)
+          setError(null)
         } else {
-          setError('Could not load heart rate')
+          setData(null)
+          setEmpty(false)
+          const caught = heartOutcome.reason
+          setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
         }
+
+        const windows: SleepWindow[] = []
+        for (const outcome of [sleepToday, sleepTomorrow]) {
+          if (outcome.status !== 'fulfilled' || !outcome.value) continue
+          const window = sleepWindowFromSleep(outcome.value)
+          if (window) windows.push(window)
+        }
+        setSleepWindows(windows)
       } finally {
         if (!cancelled) setPending(false)
       }
@@ -85,7 +108,9 @@ export function HeartRatePage() {
 
       {data ? (
         <>
-          {data.samples.length > 0 ? <HeartRateChart samples={data.samples} /> : null}
+          {data.samples.length > 0 ? (
+            <HeartRateChart samples={data.samples} sleepWindows={sleepWindows} />
+          ) : null}
 
           <section className="card metrics">
             <p>
