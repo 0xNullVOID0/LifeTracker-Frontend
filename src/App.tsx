@@ -1,5 +1,6 @@
 import {Navigate, Route, Routes} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
+import {ClimatePage} from './pages/ClimatePage.tsx'
 import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
@@ -46,6 +47,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <SleepPage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/climate"
+            element={
+              <RequireAuth>
+                <ClimatePage />
               </RequireAuth>
             }
         />

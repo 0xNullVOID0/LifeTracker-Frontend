@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import type {RoomClimateMeasurement} from './types/climate.ts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
 
 function useChartColors() {
@@ -228,6 +229,84 @@ export function StressTrendChart({ days }: { days: GarminDay[] }) {
             <Tooltip />
             <Line type="monotone" dataKey="average" stroke={colors.line} dot={{ r: 3 }} strokeWidth={2} />
             <Line type="monotone" dataKey="max" stroke={colors.awake} dot={{ r: 3 }} strokeWidth={1.5} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
+}
+
+type ClimatePoint = { t: number; temperature: number; humidity: number; co2: number }
+
+export function RoomClimateCharts({ measurements }: { measurements: RoomClimateMeasurement[] }) {
+  const colors = useChartColors()
+  const data: ClimatePoint[] = measurements
+    .map((row) => ({
+      t: new Date(row.timestamp).getTime(),
+      temperature: row.temperature,
+      humidity: row.humidity,
+      co2: row.cO2,
+    }))
+    .filter((row) => Number.isFinite(row.t))
+    .sort((a, b) => a.t - b.t)
+
+  if (data.length === 0) return null
+
+  return (
+    <>
+      <ClimateSeries title="CO₂" data={data} dataKey="co2" unit=" ppm" stroke={colors.avgLine} colors={colors} />
+      <ClimateSeries title="Temperature" data={data} dataKey="temperature" unit="°C" stroke={colors.line} colors={colors} />
+      <ClimateSeries title="Humidity" data={data} dataKey="humidity" unit="%" stroke={colors.deep} colors={colors} />
+    </>
+  )
+}
+
+function ClimateSeries({
+  title,
+  data,
+  dataKey,
+  unit,
+  stroke,
+  colors,
+}: {
+  title: string
+  data: ClimatePoint[]
+  dataKey: keyof Omit<ClimatePoint, 't'>
+  unit: string
+  stroke: string
+  colors: ReturnType<typeof useChartColors>
+}) {
+  const values = data.map((row) => row[dataKey])
+  const yMin = Math.min(...values)
+  const yMax = Math.max(...values)
+  const pad = Math.max(0.5, (yMax - yMin) * 0.08)
+
+  return (
+    <section className="card chart-card">
+      <h2>{title}</h2>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={formatTickTime}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+            />
+            <YAxis
+              domain={[yMin - pad, yMax + pad]}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={48}
+            />
+            <Tooltip
+              labelFormatter={(value) => formatTickTime(Number(value))}
+              formatter={(value) => [`${Number(value ?? 0).toFixed(1)}${unit}`, title]}
+            />
+            <Line type="linear" dataKey={dataKey} stroke={stroke} dot={false} strokeWidth={1.5} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
