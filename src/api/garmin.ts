@@ -1,4 +1,4 @@
-﻿import type {DailyHeartRate, DailyStress} from '../types/garmin.ts'
+﻿import type {DailyHeartRate, DailySleep, DailyStress} from '../types/garmin.ts'
 import {apiFetch} from './client.ts'
 
 export function getDailyStress(date?: string): Promise<DailyStress | null> {
@@ -9,4 +9,9 @@ export function getDailyStress(date?: string): Promise<DailyStress | null> {
 export function getDailyHeartRate(date?: string): Promise<DailyHeartRate | null> {
   const query = date ? `?date=${encodeURIComponent(date)}` : ''
   return apiFetch<DailyHeartRate>(`/api/garmin/heartrate${query}`)
+}
+
+export function getDailySleep(date?: string): Promise<DailySleep | null> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  return apiFetch<DailySleep>(`/api/garmin/sleep${query}`)
 }

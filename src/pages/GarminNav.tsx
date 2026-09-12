@@ -5,6 +5,7 @@ export function GarminNav() {
     <nav className="nav">
       <NavLink to="/stress">Stress</NavLink>
       <NavLink to="/heartrate">Heart rate</NavLink>
+      <NavLink to="/sleep">Sleep</NavLink>
     </nav>
   )
 }

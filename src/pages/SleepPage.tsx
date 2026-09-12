@@ -1,8 +1,8 @@
 import {type FormEvent, useEffect, useState} from 'react'
-import {getDailyHeartRate} from '../api/garmin.ts'
+import {getDailySleep} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {DailyHeartRate} from '../types/garmin.ts'
+import type {DailySleep} from '../types/garmin.ts'
 import {GarminNav} from './GarminNav.tsx'
 
 function todayLocal(): string {
@@ -18,11 +18,17 @@ function formatTimestamp(value: string): string {
   return parsed.toLocaleString()
 }
 
-export function HeartRatePage() {
+function formatSeconds(total: number): string {
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
+export function SleepPage() {
   const { logout } = useAuth()
   const [date, setDate] = useState(todayLocal)
   const [requestedDate, setRequestedDate] = useState(todayLocal)
-  const [data, setData] = useState<DailyHeartRate | null>(null)
+  const [data, setData] = useState<DailySleep | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -35,7 +41,7 @@ export function HeartRatePage() {
       setError(null)
       setEmpty(false)
       try {
-        const result = await getDailyHeartRate(requestedDate)
+        const result = await getDailySleep(requestedDate)
         if (cancelled) return
         setData(result)
         setEmpty(result === null)
@@ -45,7 +51,7 @@ export function HeartRatePage() {
         if (caught instanceof ApiError) {
           setError(caught.message)
         } else {
-          setError('Could not load heart rate')
+          setError('Could not load sleep')
         }
       } finally {
         if (!cancelled) setPending(false)
@@ -63,12 +69,11 @@ export function HeartRatePage() {
     setRequestedDate(date)
   }
 
-  // TODO add graphs, grafana, charts
   return (
     <main className="page">
       <header className="topbar">
         <div>
-          <h1>Daily heart rate</h1>
+          <h1>Daily sleep</h1>
           <GarminNav />
         </div>
         <button type="button" className="ghost" onClick={logout}>
@@ -90,58 +95,53 @@ export function HeartRatePage() {
 
       {empty && !error ? (
         <p className="empty">
-          No heart rate row for {requestedDate} (204). Try another date, or sync / seed Garmin heart rate.
+          No sleep row for {requestedDate} (204). Try another date, or sync / seed Garmin sleep.
         </p>
       ) : null}
 
       {data ? (
-        <>
-          <section className="card metrics">
-            <p>
-              <span>Date</span>
-              <strong>{data.date}</strong>
-            </p>
-            <p>
-              <span>Resting</span>
-              <strong>{data.restingRate}</strong>
-            </p>
-            <p>
-              <span>Min</span>
-              <strong>{data.min}</strong>
-            </p>
-            <p>
-              <span>Max</span>
-              <strong>{data.max}</strong>
-            </p>
-            <p>
-              <span>Samples</span>
-              <strong>{data.samples.length}</strong>
-            </p>
-          </section>
-
-          {data.samples.length > 0 ? (
-            <section className="card samples">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>BPM</th>
-                    <th>Sleeping</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.samples.map((sample) => (
-                    <tr key={sample.timestamp}>
-                      <td>{formatTimestamp(sample.timestamp)}</td>
-                      <td>{sample.bpm}</td>
-                      <td>{sample.sleeping ? 'yes' : 'no'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          ) : null}
-        </>
+        <section className="card metrics">
+          <p>
+            <span>Date</span>
+            <strong>{data.date}</strong>
+          </p>
+          <p>
+            <span>Start (local)</span>
+            <strong>{formatTimestamp(data.startLocal)}</strong>
+          </p>
+          <p>
+            <span>End (local)</span>
+            <strong>{formatTimestamp(data.endLocal)}</strong>
+          </p>
+          <p>
+            <span>Sleep time</span>
+            <strong>{formatSeconds(data.sleepTimeSeconds)}</strong>
+          </p>
+          <p>
+            <span>Deep</span>
+            <strong>{formatSeconds(data.deepSleepSeconds)}</strong>
+          </p>
+          <p>
+            <span>Light</span>
+            <strong>{formatSeconds(data.lightSleepSeconds)}</strong>
+          </p>
+          <p>
+            <span>REM</span>
+            <strong>{formatSeconds(data.remSleepSeconds)}</strong>
+          </p>
+          <p>
+            <span>Awake</span>
+            <strong>{formatSeconds(data.awakeSleepSeconds)}</strong>
+          </p>
+          <p>
+            <span>Avg heart rate</span>
+            <strong>{data.avgHeartRate}</strong>
+          </p>
+          <p>
+            <span>Avg sleep stress</span>
+            <strong>{data.avgSleepStress}</strong>
+          </p>
+        </section>
       ) : null}
     </main>
   )

@@ -2,6 +2,7 @@ import {Navigate, Route, Routes} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
+import {SleepPage} from './pages/SleepPage.tsx'
 import {StressPage} from './pages/StressPage.tsx'
 import type {ReactNode} from 'react'
 
@@ -28,6 +29,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <HeartRatePage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/sleep"
+            element={
+              <RequireAuth>
+                <SleepPage />
               </RequireAuth>
             }
         />
