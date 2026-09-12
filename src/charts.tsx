@@ -55,7 +55,13 @@ export function HeartRateChart({ samples }: { samples: HeartRateSample[] }) {
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
             />
-            <YAxis stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} width={40} />
+            <YAxis
+              domain={[(min: number) => Math.max(0, Math.floor(min - 4)), (max: number) => Math.ceil(max + 4)]}
+              allowDecimals={false}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={40}
+            />
             <Tooltip
               labelFormatter={(value) => formatTickTime(Number(value))}
               formatter={(value) => [value ?? 0, 'BPM']}
@@ -120,7 +126,13 @@ export function StressTrendChart({ days }: { days: GarminDay[] }) {
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
             <XAxis dataKey="date" tickFormatter={formatTickDate} stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} />
-            <YAxis stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} width={40} />
+            <YAxis
+              domain={[(min: number) => Math.max(0, Math.floor(min - 4)), (max: number) => Math.ceil(max + 4)]}
+              allowDecimals={false}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={40}
+            />
             <Tooltip />
             <Line type="monotone" dataKey="average" stroke={colors.line} dot={{ r: 3 }} strokeWidth={2} />
             <Line type="monotone" dataKey="max" stroke={colors.awake} dot={{ r: 3 }} strokeWidth={1.5} />
