@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import type {BuienradarMeasurement} from './types/buienradar.ts'
 import type {RoomClimateMeasurement} from './types/climate.ts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
 
@@ -311,5 +312,94 @@ function ClimateSeries({
         </ResponsiveContainer>
       </div>
     </section>
+  )
+}
+
+type WeatherPoint = {
+  t: number
+  temperature: number | null
+  humidity: number | null
+  precipitation: number | null
+  windspeed: number | null
+  sunpower: number | null
+  airpressure: number | null
+}
+
+export function BuienradarCharts({ measurements }: { measurements: BuienradarMeasurement[] }) {
+  const colors = useChartColors()
+  const data: WeatherPoint[] = breakLineGaps(
+    measurements
+      .map((row): WeatherPoint => ({
+        t: new Date(row.timestamp).getTime(),
+        temperature: row.temperature,
+        humidity: row.humidity,
+        precipitation: row.precipitation,
+        windspeed: row.windspeed,
+        sunpower: row.sunpower,
+        airpressure: row.airpressure,
+      }))
+      .filter((row) => Number.isFinite(row.t))
+      .sort((a, b) => a.t - b.t),
+    (t) => ({
+      t,
+      temperature: null,
+      humidity: null,
+      precipitation: null,
+      windspeed: null,
+      sunpower: null,
+      airpressure: null,
+    }),
+  )
+
+  if (data.length === 0) return null
+
+  return (
+    <>
+      <ClimateSeries
+        title="Temperature"
+        data={data}
+        dataKey="temperature"
+        unit="°C"
+        stroke={colors.line}
+        colors={colors}
+        scale="decimal"
+      />
+      <ClimateSeries
+        title="Humidity"
+        data={data}
+        dataKey="humidity"
+        unit="%"
+        stroke={colors.deep}
+        colors={colors}
+        scale="decimal"
+      />
+      <ClimateSeries
+        title="Precipitation"
+        data={data}
+        dataKey="precipitation"
+        unit=" mm"
+        stroke={colors.avgLine}
+        colors={colors}
+        scale="decimal"
+      />
+      <ClimateSeries
+        title="Wind"
+        data={data}
+        dataKey="windspeed"
+        unit=" m/s"
+        stroke={colors.avgLine}
+        colors={colors}
+        scale="decimal"
+      />
+      <ClimateSeries
+        title="Sun power"
+        data={data}
+        dataKey="sunpower"
+        unit=""
+        stroke={colors.awake}
+        colors={colors}
+        scale="co2"
+      />
+    </>
   )
 }

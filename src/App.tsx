@@ -1,5 +1,6 @@
 import {Navigate, Route, Routes} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
+import {BuienradarPage} from './pages/BuienradarPage.tsx'
 import {ClimatePage} from './pages/ClimatePage.tsx'
 import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
@@ -55,6 +56,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <ClimatePage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/buienradar"
+            element={
+              <RequireAuth>
+                <BuienradarPage />
               </RequireAuth>
             }
         />
