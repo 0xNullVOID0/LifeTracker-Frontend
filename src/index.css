@@ -106,6 +106,12 @@ h1 {
   color: var(--text-h);
 }
 
+.card h2 a,
+.metrics a,
+.samples a {
+  color: var(--text-h);
+}
+
 button.link {
   padding: 0;
   background: none;

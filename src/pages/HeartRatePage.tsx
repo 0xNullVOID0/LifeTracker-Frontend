@@ -1,16 +1,10 @@
-import {type FormEvent, useEffect, useState} from 'react'
+import {useEffect, useState} from 'react'
 import {getDailyHeartRate} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyHeartRate} from '../types/garmin.ts'
+import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
-
-function todayLocal(): string {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
 
 function formatTimestamp(value: string): string {
   const parsed = new Date(value)
@@ -20,8 +14,7 @@ function formatTimestamp(value: string): string {
 
 export function HeartRatePage() {
   const { logout } = useAuth()
-  const [date, setDate] = useState(todayLocal)
-  const [requestedDate, setRequestedDate] = useState(todayLocal)
+  const { date, setDate, requestedDate, onSubmit } = useRequestedDate()
   const [data, setData] = useState<DailyHeartRate | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,11 +50,6 @@ export function HeartRatePage() {
       cancelled = true
     }
   }, [requestedDate])
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    setRequestedDate(date)
-  }
 
   // TODO add graphs, grafana, charts
   return (

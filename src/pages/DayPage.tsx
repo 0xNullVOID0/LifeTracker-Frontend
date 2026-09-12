@@ -1,16 +1,13 @@
-import {type FormEvent, useEffect, useState} from 'react'
-import {getGarminDay, getGarminDays} from '../api/garmin.ts'
+import {useEffect, useState} from 'react'
+import {Link} from 'react-router-dom'
+import {getAwakeWindow, getGarminDay, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {GarminDay} from '../types/garmin.ts'
+import {dateQuery} from '../dates.ts'
+import type {AwakeWindow, GarminDay} from '../types/garmin.ts'
+import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
-
-function todayLocal(): string {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
+import {StoredDays} from './StoredDays.tsx'
 
 function formatTimestamp(value: string): string {
   const parsed = new Date(value)
@@ -24,6 +21,16 @@ function formatSeconds(total: number): string {
   return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
+function formatTimeSpan(value: string): string {
+  const match = /^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})/.exec(value)
+  if (!match) return value
+  const days = Number(match[1] ?? 0)
+  const hours = Number(match[2])
+  const minutes = Number(match[3])
+  if (days > 0) return `${days}d ${hours}h ${String(minutes).padStart(2, '0')}m`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
 function loadErrorMessage(caught: unknown, fallback: string): string {
   if (caught instanceof ApiError) return caught.message
   return fallback
@@ -31,13 +38,14 @@ function loadErrorMessage(caught: unknown, fallback: string): string {
 
 export function DayPage() {
   const { logout } = useAuth()
-  const [date, setDate] = useState(todayLocal)
-  const [requestedDate, setRequestedDate] = useState(todayLocal)
+  const { date, setDate, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [data, setData] = useState<GarminDay | null>(null)
   const [days, setDays] = useState<GarminDay[]>([])
+  const [awake, setAwake] = useState<AwakeWindow | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [daysError, setDaysError] = useState<string | null>(null)
+  const [awakeError, setAwakeError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
@@ -47,12 +55,14 @@ export function DayPage() {
       setPending(true)
       setError(null)
       setDaysError(null)
+      setAwakeError(null)
       setEmpty(false)
 
       try {
-        const [dayOutcome, daysOutcome] = await Promise.allSettled([
+        const [dayOutcome, daysOutcome, awakeOutcome] = await Promise.allSettled([
           getGarminDay(requestedDate),
           getGarminDays(),
+          getAwakeWindow(requestedDate),
         ])
         if (cancelled) return
 
@@ -71,6 +81,13 @@ export function DayPage() {
           setDays([])
           setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
         }
+
+        if (awakeOutcome.status === 'fulfilled') {
+          setAwake(awakeOutcome.value)
+        } else {
+          setAwake(null)
+          setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
+        }
       } finally {
         if (!cancelled) setPending(false)
       }
@@ -81,16 +98,6 @@ export function DayPage() {
       cancelled = true
     }
   }, [requestedDate])
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    setRequestedDate(date)
-  }
-
-  function loadDate(next: string) {
-    setDate(next)
-    setRequestedDate(next)
-  }
 
   return (
     <main className="page">
@@ -116,6 +123,7 @@ export function DayPage() {
 
       {error ? <p className="error">{error}</p> : null}
       {daysError ? <p className="error">{daysError}</p> : null}
+      {awakeError ? <p className="error">{awakeError}</p> : null}
 
       {empty && !error ? (
         <p className="empty">No Garmin data for {requestedDate} (204). Try another date, or sync / seed.</p>
@@ -124,7 +132,41 @@ export function DayPage() {
       {data ? (
         <>
           <section className="card metrics">
-            <h2>Stress</h2>
+            <h2>
+              <Link to={`/heartrate${dateQuery(requestedDate)}`}>Heart rate</Link>
+            </h2>
+            {data.heartRate ? (
+              <>
+                <p>
+                  <span>Resting</span>
+                  <strong>{data.heartRate.restingRate}</strong>
+                </p>
+                <p>
+                  <span>Min</span>
+                  <strong>{data.heartRate.min}</strong>
+                </p>
+                <p>
+                  <span>Max</span>
+                  <strong>{data.heartRate.max}</strong>
+                </p>
+                <p>
+                  <span>Samples</span>
+                  <strong>
+                    <Link to={`/heartrate${dateQuery(requestedDate)}`}>
+                      {data.heartRate.samples.length} — open
+                    </Link>
+                  </strong>
+                </p>
+              </>
+            ) : (
+              <p className="empty">No heart rate row</p>
+            )}
+          </section>
+
+          <section className="card metrics">
+            <h2>
+              <Link to={`/stress${dateQuery(requestedDate)}`}>Stress</Link>
+            </h2>
             {data.stress ? (
               <>
                 <p>
@@ -142,33 +184,9 @@ export function DayPage() {
           </section>
 
           <section className="card metrics">
-            <h2>Heart rate</h2>
-            {data.heartRate ? (
-              <>
-                <p>
-                  <span>Resting</span>
-                  <strong>{data.heartRate.restingRate}</strong>
-                </p>
-                <p>
-                  <span>Min</span>
-                  <strong>{data.heartRate.min}</strong>
-                </p>
-                <p>
-                  <span>Max</span>
-                  <strong>{data.heartRate.max}</strong>
-                </p>
-                <p>
-                  <span>Samples</span>
-                  <strong>{data.heartRate.samples.length}</strong>
-                </p>
-              </>
-            ) : (
-              <p className="empty">No heart rate row</p>
-            )}
-          </section>
-
-          <section className="card metrics">
-            <h2>Sleep</h2>
+            <h2>
+              <Link to={`/sleep${dateQuery(requestedDate)}`}>Sleep</Link>
+            </h2>
             {data.sleep ? (
               <>
                 <p>
@@ -195,6 +213,30 @@ export function DayPage() {
                   <span>REM</span>
                   <strong>{formatSeconds(data.sleep.remSleepSeconds)}</strong>
                 </p>
+                {awake ? (
+                  <>
+                    <p>
+                      <span>Awake window</span>
+                      <strong>
+                        {awake.priorSleepID} → {awake.subsequentSleepID}
+                      </strong>
+                    </p>
+                    <p>
+                      <span>Awake from</span>
+                      <strong>{formatTimestamp(awake.startLocal)}</strong>
+                    </p>
+                    <p>
+                      <span>Awake until</span>
+                      <strong>{formatTimestamp(awake.endLocal)}</strong>
+                    </p>
+                    <p>
+                      <span>Awake for</span>
+                      <strong>{formatTimeSpan(awake.duration)}</strong>
+                    </p>
+                  </>
+                ) : !awakeError ? (
+                  <p className="empty">No awake window (needs the previous night)</p>
+                ) : null}
               </>
             ) : (
               <p className="empty">No sleep row</p>
@@ -203,35 +245,7 @@ export function DayPage() {
         </>
       ) : null}
 
-      {days.length > 0 ? (
-        <section className="card samples">
-          <h2>Stored days</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Stress</th>
-                <th>HR</th>
-                <th>Sleep</th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((day) => (
-                <tr key={day.date}>
-                  <td>
-                    <button type="button" className="link" onClick={() => loadDate(day.date)}>
-                      {day.date}
-                    </button>
-                  </td>
-                  <td>{day.stress ? 'yes' : '—'}</td>
-                  <td>{day.heartRate ? 'yes' : '—'}</td>
-                  <td>{day.sleep ? 'yes' : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
+      <StoredDays days={days} onSelectDate={requestDate} />
     </main>
   )
 }
