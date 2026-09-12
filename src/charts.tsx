@@ -34,7 +34,24 @@ function useChartColors() {
     rem: dark ? '#d4c4ea' : '#9b87b5',
     awake: dark ? '#f97066' : '#b42318',
     sleepBand: dark ? 'rgba(126, 184, 224, 0.18)' : 'rgba(42, 111, 151, 0.14)',
+    avgLine: dark ? '#7eb8e0' : '#2a6f97',
   }
+}
+
+const averageWindowMs = 40 * 60 * 1000
+
+function rollingAverage(points: { t: number; bpm: number }[]): number[] {
+  return points.map((point) => {
+    let sum = 0
+    let count = 0
+    for (const other of points) {
+      if (Math.abs(other.t - point.t) <= averageWindowMs / 2) {
+        sum += other.bpm
+        count += 1
+      }
+    }
+    return count > 0 ? sum / count : point.bpm
+  })
 }
 
 export type SleepWindow = { start: number; end: number }
@@ -71,7 +88,7 @@ export function HeartRateChart({
   sleepWindows?: SleepWindow[]
 }) {
   const colors = useChartColors()
-  const data = samples
+  const sorted = samples
     .map((sample) => ({
       t: new Date(sample.timestamp).getTime(),
       sleeping: sample.sleeping,
@@ -79,6 +96,8 @@ export function HeartRateChart({
     }))
     .filter((sample) => Number.isFinite(sample.t) && Number.isFinite(sample.bpm))
     .sort((a, b) => a.t - b.t)
+  const averages = rollingAverage(sorted)
+  const data = sorted.map((sample, index) => ({ ...sample, avg: Math.round(averages[index] * 10) / 10 }))
   if (data.length === 0) return null
   const bpms = data.map((sample) => sample.bpm)
   const yMin = Math.max(0, Math.min(...bpms) - 4)
@@ -93,6 +112,7 @@ export function HeartRateChart({
       <h2>BPM</h2>
       <p className="chart-legend">
         <span className="swatch sleep" /> Sleep
+        <span className="swatch avg" /> Average
       </p>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
@@ -125,18 +145,20 @@ export function HeartRateChart({
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.[0]) return null
-                const row = payload[0].payload as { sleeping?: boolean; bpm?: number }
+                const row = payload[0].payload as { sleeping?: boolean; bpm?: number; avg?: number }
                 return (
                   <div className="chart-tooltip">
                     <div>{formatTickTime(Number(label))}</div>
                     <div>
-                      {String(payload[0].value)} BPM{row.sleeping ? ' · sleep' : ''}
+                      {row.bpm} BPM{row.sleeping ? ' · sleep' : ''}
                     </div>
+                    <div>Avg {row.avg}</div>
                   </div>
                 )
               }}
             />
-            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.5} isAnimationActive={false} />
+            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.25} isAnimationActive={false} />
+            <Line type="linear" dataKey="avg" stroke={colors.avgLine} dot={false} strokeWidth={2} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

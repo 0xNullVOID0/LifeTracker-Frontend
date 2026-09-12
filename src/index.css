@@ -322,11 +322,21 @@ button.ghost {
 
 .swatch.sleep {
   background: #2a6f97;
+  opacity: 0.45;
+}
+
+.swatch.avg {
+  background: #2a6f97;
 }
 
 @media (prefers-color-scheme: dark) {
-  .swatch.sleep {
+  .swatch.sleep,
+  .swatch.avg {
     background: #7eb8e0;
+  }
+
+  .swatch.sleep {
+    opacity: 0.45;
   }
 }
 
