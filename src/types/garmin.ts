@@ -1,4 +1,13 @@
-﻿export type DailyStress = {
+﻿export type GarminDay = {
+  date: string
+  heartRate: DailyHeartRate | null
+  stress: DailyStress | null
+  sleep: DailySleep | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DailyStress = {
   date: string
   average: number
   max: number

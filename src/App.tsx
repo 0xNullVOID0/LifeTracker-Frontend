@@ -1,5 +1,6 @@
 import {Navigate, Route, Routes} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
+import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
 import {SleepPage} from './pages/SleepPage.tsx'
@@ -16,6 +17,14 @@ export default function App() {
   return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+            path="/day"
+            element={
+              <RequireAuth>
+                <DayPage />
+              </RequireAuth>
+            }
+        />
         <Route
             path="/stress"
             element={
@@ -40,7 +49,7 @@ export default function App() {
               </RequireAuth>
             }
         />
-        <Route path="*" element={<Navigate to="/stress" replace />} />
+        <Route path="*" element={<Navigate to="/day" replace />} />
       </Routes>
   )
 }

@@ -10,7 +10,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  if (token) return <Navigate to="/stress" replace />
+  if (token) return <Navigate to="/day" replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -18,7 +18,7 @@ export function LoginPage() {
     setPending(true)
     try {
       await login(password)
-      navigate('/stress', { replace: true })
+      navigate('/day', { replace: true })
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         setError('Wrong password')
