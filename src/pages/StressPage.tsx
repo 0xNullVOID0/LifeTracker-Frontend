@@ -1,8 +1,9 @@
 ﻿import {useEffect, useState} from 'react'
-import {getDailyStress} from '../api/garmin.ts'
+import {getDailyStress, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {DailyStress} from '../types/garmin.ts'
+import type {DailyStress, GarminDay} from '../types/garmin.ts'
+import {StressTrendChart} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -13,6 +14,7 @@ export function StressPage() {
   const [data, setData] = useState<DailyStress | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [days, setDays] = useState<GarminDay[]>([])
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
@@ -23,13 +25,15 @@ export function StressPage() {
       setError(null)
       setEmpty(false)
       try {
-        const result = await getDailyStress(requestedDate)
+        const [result, allDays] = await Promise.all([getDailyStress(requestedDate), getGarminDays()])
         if (cancelled) return
         setData(result)
         setEmpty(result === null)
+        setDays(allDays ?? [])
       } catch (caught) {
         if (cancelled) return
         setData(null)
+        setDays([])
         if (caught instanceof ApiError) {
           setError(caught.message)
         } else {
@@ -47,7 +51,7 @@ export function StressPage() {
   }, [requestedDate])
 
   return (
-    <main className="page">
+    <main className="page wide">
       <header className="topbar">
         <div>
           <h1>Daily stress</h1>
@@ -73,6 +77,8 @@ export function StressPage() {
       {empty && !error ? (
         <p className="empty">No stress row for {requestedDate} (204). Try another date, or run Demo compose so seed data exists.</p>
       ) : null}
+
+      <StressTrendChart days={days} />
 
       {data ? (
         <section className="card metrics">

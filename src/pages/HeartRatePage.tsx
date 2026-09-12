@@ -3,6 +3,7 @@ import {getDailyHeartRate} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyHeartRate} from '../types/garmin.ts'
+import {HeartRateChart} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -52,9 +53,8 @@ export function HeartRatePage() {
     }
   }, [requestedDate])
 
-  // TODO add graphs, grafana, charts
   return (
-    <main className="page">
+    <main className="page wide">
       <header className="topbar">
         <div>
           <h1>Daily heart rate</h1>
@@ -85,6 +85,8 @@ export function HeartRatePage() {
 
       {data ? (
         <>
+          {data.samples.length > 0 ? <HeartRateChart samples={data.samples} /> : null}
+
           <section className="card metrics">
             <p>
               <span>Date</span>

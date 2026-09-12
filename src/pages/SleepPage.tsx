@@ -3,6 +3,7 @@ import {getAwakeWindow, getDailySleep} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {AwakeWindow, DailySleep} from '../types/garmin.ts'
+import {SleepStagesChart} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -87,7 +88,7 @@ export function SleepPage() {
   }, [requestedDate])
 
   return (
-    <main className="page">
+    <main className="page wide">
       <header className="topbar">
         <div>
           <h1>Daily sleep</h1>
@@ -118,6 +119,8 @@ export function SleepPage() {
       ) : null}
 
       {data ? (
+        <>
+          <SleepStagesChart sleep={data} />
         <section className="card metrics">
           <p>
             <span>Date</span>
@@ -160,6 +163,7 @@ export function SleepPage() {
             <strong>{data.avgSleepStress}</strong>
           </p>
         </section>
+        </>
       ) : null}
 
       {awake ? (
