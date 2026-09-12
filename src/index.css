@@ -141,6 +141,67 @@ label {
   flex: 1;
 }
 
+.datepicker {
+  position: relative;
+}
+
+.datepicker-trigger {
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .datepicker-trigger {
+    color: var(--text-h);
+  }
+}
+
+.datepicker-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  padding: 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(20 17 26 / 0.16);
+}
+
+.rdp-root {
+  --rdp-accent-color: var(--accent);
+  --rdp-accent-background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  --rdp-today-color: var(--accent);
+  --rdp-day-height: 2.25rem;
+  --rdp-day-width: 2.25rem;
+  --rdp-day_button-height: 2.1rem;
+  --rdp-day_button-width: 2.1rem;
+}
+
+.datepicker .rdp-root button {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .datepicker .rdp-root button {
+    color: inherit;
+  }
+}
+
+.datepicker .rdp-root select {
+  font: inherit;
+  color: var(--text-h);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.2rem 0.35rem;
+}
+
 input {
   font: inherit;
   padding: 0.5rem 0.65rem;

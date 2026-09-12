@@ -3,6 +3,7 @@ import {getDailyHeartRate} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyHeartRate} from '../types/garmin.ts'
+import {DatePicker} from '../DatePicker.tsx'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -14,7 +15,7 @@ function formatTimestamp(value: string): string {
 
 export function HeartRatePage() {
   const { logout } = useAuth()
-  const { date, setDate, requestedDate, onSubmit } = useRequestedDate()
+  const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [data, setData] = useState<DailyHeartRate | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,7 +68,7 @@ export function HeartRatePage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <input type="date" name="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+          <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
         <button type="submit" disabled={pending}>
           {pending ? 'Loading…' : 'Load'}

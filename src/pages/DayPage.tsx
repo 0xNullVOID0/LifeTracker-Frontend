@@ -3,6 +3,7 @@ import {Link} from 'react-router-dom'
 import {getAwakeWindow, getGarminDay, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
+import {DatePicker} from '../DatePicker.tsx'
 import {dateQuery} from '../dates.ts'
 import type {AwakeWindow, GarminDay} from '../types/garmin.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
@@ -38,7 +39,7 @@ function loadErrorMessage(caught: unknown, fallback: string): string {
 
 export function DayPage() {
   const { logout } = useAuth()
-  const { date, setDate, requestedDate, onSubmit, requestDate } = useRequestedDate()
+  const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [data, setData] = useState<GarminDay | null>(null)
   const [days, setDays] = useState<GarminDay[]>([])
   const [awake, setAwake] = useState<AwakeWindow | null>(null)
@@ -114,7 +115,7 @@ export function DayPage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <input type="date" name="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+          <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
         <button type="submit" disabled={pending}>
           {pending ? 'Loading…' : 'Load'}
