@@ -1,8 +1,8 @@
 import {type FormEvent, useEffect, useState} from 'react'
-import {getDailySleep} from '../api/garmin.ts'
+import {getAwakeWindow, getDailySleep} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {DailySleep} from '../types/garmin.ts'
+import type {AwakeWindow, DailySleep} from '../types/garmin.ts'
 import {GarminNav} from './GarminNav.tsx'
 
 function todayLocal(): string {
@@ -24,13 +24,30 @@ function formatSeconds(total: number): string {
   return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
+function formatTimeSpan(value: string): string {
+  const match = /^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})/.exec(value)
+  if (!match) return value
+  const days = Number(match[1] ?? 0)
+  const hours = Number(match[2])
+  const minutes = Number(match[3])
+  if (days > 0) return `${days}d ${hours}h ${String(minutes).padStart(2, '0')}m`
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
+function loadErrorMessage(caught: unknown, fallback: string): string {
+  if (caught instanceof ApiError) return caught.message
+  return fallback
+}
+
 export function SleepPage() {
   const { logout } = useAuth()
   const [date, setDate] = useState(todayLocal)
   const [requestedDate, setRequestedDate] = useState(todayLocal)
   const [data, setData] = useState<DailySleep | null>(null)
+  const [awake, setAwake] = useState<AwakeWindow | null>(null)
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [awakeError, setAwakeError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
@@ -39,19 +56,30 @@ export function SleepPage() {
     async function load() {
       setPending(true)
       setError(null)
+      setAwakeError(null)
       setEmpty(false)
+
       try {
-        const result = await getDailySleep(requestedDate)
+        const [sleepOutcome, awakeOutcome] = await Promise.allSettled([
+          getDailySleep(requestedDate),
+          getAwakeWindow(requestedDate),
+        ])
         if (cancelled) return
-        setData(result)
-        setEmpty(result === null)
-      } catch (caught) {
-        if (cancelled) return
-        setData(null)
-        if (caught instanceof ApiError) {
-          setError(caught.message)
+
+        if (sleepOutcome.status === 'fulfilled') {
+          setData(sleepOutcome.value)
+          setEmpty(sleepOutcome.value === null)
         } else {
-          setError('Could not load sleep')
+          setData(null)
+          setEmpty(false)
+          setError(loadErrorMessage(sleepOutcome.reason, 'Could not load sleep'))
+        }
+
+        if (awakeOutcome.status === 'fulfilled') {
+          setAwake(awakeOutcome.value)
+        } else {
+          setAwake(null)
+          setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
         }
       } finally {
         if (!cancelled) setPending(false)
@@ -92,6 +120,7 @@ export function SleepPage() {
       </form>
 
       {error ? <p className="error">{error}</p> : null}
+      {awakeError ? <p className="error">{awakeError}</p> : null}
 
       {empty && !error ? (
         <p className="empty">
@@ -130,7 +159,7 @@ export function SleepPage() {
             <strong>{formatSeconds(data.remSleepSeconds)}</strong>
           </p>
           <p>
-            <span>Awake</span>
+            <span>Awake in bed</span>
             <strong>{formatSeconds(data.awakeSleepSeconds)}</strong>
           </p>
           <p>
@@ -142,6 +171,34 @@ export function SleepPage() {
             <strong>{data.avgSleepStress}</strong>
           </p>
         </section>
+      ) : null}
+
+      {awake ? (
+        <section className="card metrics">
+          <p>
+            <span>Awake window</span>
+            <strong>
+              {awake.priorSleepID} → {awake.subsequentSleepID}
+            </strong>
+          </p>
+          <p>
+            <span>From</span>
+            <strong>{formatTimestamp(awake.startLocal)}</strong>
+          </p>
+          <p>
+            <span>Until</span>
+            <strong>{formatTimestamp(awake.endLocal)}</strong>
+          </p>
+          <p>
+            {/* TODO Duration or Awake for */}
+            <span>Awake for</span>
+            <strong>{formatTimeSpan(awake.duration)}</strong>
+          </p>
+        </section>
+      ) : null}
+
+      {data && !awake && !awakeError ? (
+        <p className="empty">No awake window for {requestedDate} (204). Needs the previous night's sleep row.</p>
       ) : null}
     </main>
   )

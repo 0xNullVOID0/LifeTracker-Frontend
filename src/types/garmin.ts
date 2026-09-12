@@ -41,3 +41,14 @@ export type DailySleep = {
   createdAt: string
   updatedAt: string
 }
+
+export type AwakeWindow = {
+  id: number
+  priorSleepID: string
+  priorSleep: DailySleep
+  subsequentSleepID: string
+  subsequentSleep: DailySleep
+  startLocal: string
+  endLocal: string
+  duration: string
+}

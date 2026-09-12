@@ -1,4 +1,4 @@
-﻿import type {DailyHeartRate, DailySleep, DailyStress} from '../types/garmin.ts'
+﻿import type {AwakeWindow, DailyHeartRate, DailySleep, DailyStress} from '../types/garmin.ts'
 import {apiFetch} from './client.ts'
 
 export function getDailyStress(date?: string): Promise<DailyStress | null> {
@@ -14,4 +14,9 @@ export function getDailyHeartRate(date?: string): Promise<DailyHeartRate | null>
 export function getDailySleep(date?: string): Promise<DailySleep | null> {
   const query = date ? `?date=${encodeURIComponent(date)}` : ''
   return apiFetch<DailySleep>(`/api/garmin/sleep${query}`)
+}
+
+export function getAwakeWindow(date?: string): Promise<AwakeWindow | null> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : ''
+  return apiFetch<AwakeWindow>(`/api/garmin/sleep/awake-window${query}`)
 }
