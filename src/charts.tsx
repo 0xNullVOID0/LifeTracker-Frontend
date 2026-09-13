@@ -271,19 +271,63 @@ export function StressTrendChart({ days }: { days: GarminDay[] }) {
   )
 }
 
-type ClimatePoint = { t: number; temperature: number; humidity: number; co2: number }
+type ClimatePoint = { t: number; temperature: number | null; humidity: number | null; co2: number | null }
+
+const tempSettleMs = 5 * 60 * 1000
+const humidSettleMs = 11 * 60 * 1000
+
+function maskEsp32Calibration(points: ClimatePoint[]): ClimatePoint[] {
+  if (points.length < 2) return points
+  const gapLimit = inferredGapLimit(points)
+  const resumes: number[] = []
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]
+    const cur = points[i]
+    const gap = cur.t - prev.t
+    const close = gap <= gapLimit
+    const tempJump =
+      close &&
+      prev.temperature != null &&
+      cur.temperature != null &&
+      Math.abs(cur.temperature - prev.temperature) >= 2.5
+    const humidJump =
+      close &&
+      prev.humidity != null &&
+      cur.humidity != null &&
+      Math.abs(cur.humidity - prev.humidity) >= 10
+    if (gap > gapLimit || tempJump || humidJump) resumes.push(cur.t)
+  }
+
+  if (resumes.length === 0) return points
+
+  return points.map((point) => {
+    let temperature = point.temperature
+    let humidity = point.humidity
+    for (const start of resumes) {
+      if (point.t >= start && point.t < start + tempSettleMs) temperature = null
+      if (point.t >= start && point.t < start + humidSettleMs) humidity = null
+    }
+    return { ...point, temperature, humidity }
+  })
+}
 
 export function RoomClimateCharts({ measurements }: { measurements: RoomClimateMeasurement[] }) {
   const colors = useChartColors()
-  const data: ClimatePoint[] = measurements
+  const data: ClimatePoint[] = breakLineGaps(
+    maskEsp32Calibration(
+      measurements
     .map((row) => ({
-      t: new Date(row.timestamp).getTime(),
+          t: parseClimateTimestamp(row.timestamp).getTime(),
       temperature: row.temperature,
       humidity: row.humidity,
       co2: row.cO2,
     }))
     .filter((row) => Number.isFinite(row.t))
-    .sort((a, b) => a.t - b.t)
+        .sort((a, b) => a.t - b.t),
+    ),
+    (t) => ({ t, temperature: null, humidity: null, co2: null }),
+  )
 
   if (data.length === 0) return null
 
