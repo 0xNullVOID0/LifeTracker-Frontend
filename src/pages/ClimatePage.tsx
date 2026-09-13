@@ -5,7 +5,7 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {RoomClimateCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
-import {toIsoDate} from '../dates.ts'
+import {parseClimateTimestamp, toIsoDateInZone} from '../dates.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -54,7 +54,7 @@ export function ClimatePage() {
 
   const dayRows = useMemo(() => {
     if (!rows) return []
-    return rows.filter((row) => toIsoDate(new Date(row.timestamp)) === requestedDate)
+    return rows.filter((row) => toIsoDateInZone(parseClimateTimestamp(row.timestamp)) === requestedDate)
   }, [rows, requestedDate])
 
   async function onAzureLogin(event: FormEvent) {
