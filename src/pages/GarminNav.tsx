@@ -14,6 +14,7 @@ export function GarminNav() {
       <NavLink to={`/sleep${q}`}>Sleep</NavLink>
       <NavLink to={`/climate${q}`}>Climate</NavLink>
       <NavLink to={`/buienradar${q}`}>Buienradar</NavLink>
+      <NavLink to={`/inside-outside${q}`}>Inside / out</NavLink>
     </nav>
   )
 }

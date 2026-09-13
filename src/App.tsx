@@ -4,6 +4,7 @@ import {BuienradarPage} from './pages/BuienradarPage.tsx'
 import {ClimatePage} from './pages/ClimatePage.tsx'
 import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
+import {InsideOutsidePage} from './pages/InsideOutsidePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
 import {SleepPage} from './pages/SleepPage.tsx'
 import {StressPage} from './pages/StressPage.tsx'
@@ -64,6 +65,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <BuienradarPage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/inside-outside"
+            element={
+              <RequireAuth>
+                <InsideOutsidePage />
               </RequireAuth>
             }
         />

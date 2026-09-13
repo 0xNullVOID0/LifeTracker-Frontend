@@ -15,6 +15,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const [token, setTokenState] = useState<string | null>(() => getToken())
 
+  // Run after page load
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setTokenState(null)
@@ -28,8 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       async login(password: string) {
         const next = await requestToken(password)
-        setToken(next)
-        setTokenState(next)
+        setToken(next)      // save token to localStorage
+        setTokenState(next) // set token in React
       },
       logout() {
         clearToken()
@@ -40,7 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [navigate, token],
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>
+    {children}
+  </AuthContext.Provider>
 }
 
 // Context files export the hook next to the provider; Fast Refresh still applies to AuthProvider.

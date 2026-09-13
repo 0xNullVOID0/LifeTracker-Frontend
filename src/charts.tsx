@@ -317,13 +317,13 @@ export function RoomClimateCharts({ measurements }: { measurements: RoomClimateM
   const data: ClimatePoint[] = breakLineGaps(
     maskEsp32Calibration(
       measurements
-    .map((row) => ({
+        .map((row) => ({
           t: parseClimateTimestamp(row.timestamp).getTime(),
-      temperature: row.temperature,
-      humidity: row.humidity,
-      co2: row.cO2,
-    }))
-    .filter((row) => Number.isFinite(row.t))
+          temperature: row.temperature,
+          humidity: row.humidity,
+          co2: row.cO2,
+        }))
+        .filter((row) => Number.isFinite(row.t))
         .sort((a, b) => a.t - b.t),
     ),
     (t) => ({ t, temperature: null, humidity: null, co2: null }),
@@ -457,20 +457,167 @@ function ClimateSeries({
     </section>
   )
 }
+
+type ComparePoint = {
+  t: number
+  indoorTemp: number | null
+  outdoorTemp: number | null
+  indoorHumid: number | null
+  outdoorHumid: number | null
+}
+
+export function IndoorOutdoorCharts({
+  indoor,
+  outdoor,
+}: {
+  indoor: RoomClimateMeasurement[]
+  outdoor: BuienradarMeasurement[]
+}) {
+  const colors = useChartColors()
+  const indoorPoints = maskEsp32Calibration(
+    indoor
+      .map((row) => ({
+        t: parseClimateTimestamp(row.timestamp).getTime(),
+        temperature: row.temperature,
+        humidity: row.humidity,
+        co2: row.cO2,
+      }))
+      .filter((row) => Number.isFinite(row.t))
+      .sort((a, b) => a.t - b.t),
+  )
+  const outdoorPoints = outdoor
+    .map((row) => ({
+      t: new Date(row.timestamp).getTime(),
+      temperature: row.temperature,
+      humidity: row.humidity,
+    }))
+    .filter((row) => Number.isFinite(row.t))
+    .sort((a, b) => a.t - b.t)
+
+  const data: ComparePoint[] = [
+    ...indoorPoints.map((row) => ({
+      t: row.t,
+      indoorTemp: row.temperature,
+      indoorHumid: row.humidity,
+      outdoorTemp: null,
+      outdoorHumid: null,
+    })),
+    ...outdoorPoints.map((row) => ({
+      t: row.t,
+      indoorTemp: null,
+      indoorHumid: null,
+      outdoorTemp: row.temperature,
+      outdoorHumid: row.humidity,
+    })),
+  ].sort((a, b) => a.t - b.t)
+
+  if (data.length === 0) return null
+
+  return (
+    <>
+      <CompareSeries
+        title="Temperature"
+        data={data}
+        indoorKey="indoorTemp"
+        outdoorKey="outdoorTemp"
+        unit="°C"
+        colors={colors}
+      />
+      <CompareSeries
+        title="Humidity"
+        data={data}
+        indoorKey="indoorHumid"
+        outdoorKey="outdoorHumid"
+        unit="%"
+        colors={colors}
+      />
+    </>
+  )
+}
+
+function CompareSeries({
+  title,
+  data,
+  indoorKey,
+  outdoorKey,
+  unit,
+  colors,
+}: {
+  title: string
+  data: ComparePoint[]
+  indoorKey: 'indoorTemp' | 'indoorHumid'
+  outdoorKey: 'outdoorTemp' | 'outdoorHumid'
+  unit: string
+  colors: ReturnType<typeof useChartColors>
+}) {
+  const values = data.flatMap((row) => [row[indoorKey], row[outdoorKey]]).filter((value): value is number => value != null)
+  if (values.length === 0) return null
+  const span = Math.max(...values) - Math.min(...values)
+  const step = niceStep(span, 'decimal')
+  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step)
+  const ticks = axisTicks(yMin, yMax, step)
+
+  return (
+    <section className="card chart-card">
+      <h2>{title}</h2>
+      <p className="chart-legend">
+        <span className="swatch awake" /> Indoor
+        <span className="swatch avg" /> Outdoor
+      </p>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={(value) => formatTimeInZone(Number(value))}
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
             />
             <YAxis
-              domain={[yMin - pad, yMax + pad]}
+              domain={[yMin, yMax]}
+              ticks={ticks}
+              allowDecimals
+              tickFormatter={(value) => formatClimateTick(Number(value), 'decimal')}
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
-              width={48}
+              width={44}
             />
             <Tooltip
-              labelFormatter={(value) => formatTickTime(Number(value))}
-              formatter={(value) => [`${Number(value ?? 0).toFixed(1)}${unit}`, title]}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                const indoor = payload.find((entry) => entry.dataKey === indoorKey && entry.value != null)
+                const outdoor = payload.find((entry) => entry.dataKey === outdoorKey && entry.value != null)
+                if (!indoor && !outdoor) return null
+                return (
+                  <div className="chart-tooltip">
+                    <div>{formatTimeInZone(Number(label))}</div>
+                    {indoor ? <div>Indoor {formatClimateTick(Number(indoor.value), 'decimal')}{unit}</div> : null}
+                    {outdoor ? <div>Outdoor {formatClimateTick(Number(outdoor.value), 'decimal')}{unit}</div> : null}
+                  </div>
+                )
+              }}
             />
-            <Line type="linear" dataKey={dataKey} stroke={stroke} dot={false} strokeWidth={1.5} isAnimationActive={false} />
+            <Line
+              type="linear"
+              dataKey={indoorKey}
+              stroke={colors.line}
+              dot={false}
+              strokeWidth={1.5}
+              connectNulls
+              isAnimationActive={false}
+            />
+            <Line
+              type="linear"
+              dataKey={outdoorKey}
+              stroke={colors.avgLine}
+              dot={false}
+              strokeWidth={1.75}
+              connectNulls
+              isAnimationActive={false}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
