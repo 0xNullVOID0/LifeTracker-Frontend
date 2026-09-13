@@ -79,6 +79,31 @@ function formatTickTime(value: number): string {
   return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
+function inferredGapLimit(points: { t: number }[]): number {
+  if (points.length < 3) return 15 * 60 * 1000
+  const gaps: number[] = []
+  for (let i = 1; i < points.length; i++) {
+    const gap = points[i].t - points[i - 1].t
+    if (gap > 0) gaps.push(gap)
+  }
+  gaps.sort((a, b) => a - b)
+  const median = gaps[Math.floor(gaps.length / 2)] ?? 5 * 60 * 1000
+  return Math.max(median * 3, 10 * 60 * 1000)
+}
+
+function breakLineGaps<T extends { t: number }>(points: T[], empty: (t: number) => T): T[] {
+  if (points.length === 0) return points
+  const limit = inferredGapLimit(points)
+  const out: T[] = [points[0]]
+  for (let i = 1; i < points.length; i++) {
+    if (points[i].t - points[i - 1].t > limit) {
+      out.push(empty(points[i - 1].t + 1))
+    }
+    out.push(points[i])
+  }
+  return out
+}
+
 function formatTickDate(value: string): string {
   return value.slice(5)
 }
@@ -100,9 +125,16 @@ export function HeartRateChart({
     .filter((sample) => Number.isFinite(sample.t) && Number.isFinite(sample.bpm))
     .sort((a, b) => a.t - b.t)
   const averages = rollingAverage(sorted)
-  const data = sorted.map((sample, index) => ({ ...sample, avg: Math.round(averages[index] * 10) / 10 }))
+  const data = breakLineGaps(
+    sorted.map((sample, index) => ({
+      ...sample,
+      bpm: sample.bpm as number | null,
+      avg: (Math.round(averages[index] * 10) / 10) as number | null,
+    })),
+    (t) => ({ t, sleeping: false, bpm: null, avg: null }),
+  )
   if (data.length === 0) return null
-  const bpms = data.map((sample) => sample.bpm)
+  const bpms = data.map((sample) => sample.bpm).filter((bpm): bpm is number => bpm != null)
   const yMin = Math.max(0, Math.min(...bpms) - 4)
   const yMax = Math.max(...bpms) + 4
   const tMin = data[0].t
@@ -148,7 +180,8 @@ export function HeartRateChart({
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.[0]) return null
-                const row = payload[0].payload as { sleeping?: boolean; bpm?: number; avg?: number }
+                const row = payload[0].payload as { sleeping?: boolean; bpm?: number | null; avg?: number | null }
+                if (row.bpm == null) return null
                 return (
                   <div className="chart-tooltip">
                     <div>{formatTickTime(Number(label))}</div>
@@ -160,8 +193,8 @@ export function HeartRateChart({
                 )
               }}
             />
-            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.25} isAnimationActive={false} />
-            <Line type="linear" dataKey="avg" stroke={colors.avgLine} dot={false} strokeWidth={2} isAnimationActive={false} />
+            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.25} connectNulls={false} isAnimationActive={false} />
+            <Line type="linear" dataKey="avg" stroke={colors.avgLine} dot={false} strokeWidth={2} connectNulls={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
