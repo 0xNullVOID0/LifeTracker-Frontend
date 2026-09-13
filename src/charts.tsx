@@ -333,12 +333,62 @@ export function RoomClimateCharts({ measurements }: { measurements: RoomClimateM
 
   return (
     <>
-      <ClimateSeries title="CO₂" data={data} dataKey="co2" unit=" ppm" stroke={colors.avgLine} colors={colors} />
-      <ClimateSeries title="Temperature" data={data} dataKey="temperature" unit="°C" stroke={colors.line} colors={colors} />
-      <ClimateSeries title="Humidity" data={data} dataKey="humidity" unit="%" stroke={colors.deep} colors={colors} />
+      <ClimateSeries title="CO₂" data={data} dataKey="co2" unit=" ppm" stroke={colors.avgLine} colors={colors} scale="co2" />
+      <ClimateSeries
+        title="Temperature"
+        data={data}
+        dataKey="temperature"
+        unit="°C"
+        stroke={colors.line}
+        colors={colors}
+        scale="decimal"
+      />
+      <ClimateSeries
+        title="Humidity"
+        data={data}
+        dataKey="humidity"
+        unit="%"
+        stroke={colors.deep}
+        colors={colors}
+        scale="decimal"
+      />
     </>
   )
 }
+
+function niceStep(span: number, scale: 'co2' | 'decimal'): number {
+  if (scale === 'co2') {
+    if (span <= 150) return 50
+    if (span <= 400) return 100
+    return 200
+  }
+  if (span <= 2) return 0.5
+  if (span <= 8) return 1
+  return 2
+}
+
+function snapDomain(min: number, max: number, step: number): [number, number] {
+  const lo = Math.floor(min / step) * step
+  const hi = Math.ceil(max / step) * step
+  if (lo === hi) return [lo - step, hi + step]
+  return [lo, hi]
+}
+
+function axisTicks(lo: number, hi: number, step: number): number[] {
+  const ticks: number[] = []
+  const start = Math.round(lo / step) * step
+  for (let value = start; value <= hi + step / 2; value += step) {
+    ticks.push(Math.round(value / step) * step)
+  }
+  return ticks
+}
+
+function formatClimateTick(value: number, scale: 'co2' | 'decimal'): string {
+  if (scale === 'co2') return String(Math.round(value))
+  return value.toFixed(1)
+}
+
+type NumericPoint = { t: number } & Record<string, number | null>
 
 function ClimateSeries({
   title,
@@ -347,18 +397,22 @@ function ClimateSeries({
   unit,
   stroke,
   colors,
+  scale,
 }: {
   title: string
-  data: ClimatePoint[]
-  dataKey: keyof Omit<ClimatePoint, 't'>
+  data: NumericPoint[]
+  dataKey: string
   unit: string
   stroke: string
   colors: ReturnType<typeof useChartColors>
+  scale: 'co2' | 'decimal'
 }) {
-  const values = data.map((row) => row[dataKey])
-  const yMin = Math.min(...values)
-  const yMax = Math.max(...values)
-  const pad = Math.max(0.5, (yMax - yMin) * 0.08)
+  const values = data.map((row) => row[dataKey]).filter((value): value is number => value != null)
+  if (values.length === 0) return null
+  const span = Math.max(...values) - Math.min(...values)
+  const step = niceStep(span, scale)
+  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step)
+  const ticks = axisTicks(yMin, yMax, step)
 
   return (
     <section className="card chart-card">
@@ -371,7 +425,38 @@ function ClimateSeries({
               dataKey="t"
               type="number"
               domain={['dataMin', 'dataMax']}
-              tickFormatter={formatTickTime}
+              tickFormatter={(value) => formatTimeInZone(Number(value))}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+            />
+            <YAxis
+              domain={[yMin, yMax]}
+              ticks={ticks}
+              allowDecimals={scale !== 'co2'}
+              tickFormatter={(value) => formatClimateTick(Number(value), scale)}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={scale === 'co2' ? 40 : 44}
+            />
+            <Tooltip
+              labelFormatter={(value) => formatTimeInZone(Number(value))}
+              formatter={(value) => [`${formatClimateTick(Number(value ?? 0), scale)}${unit}`, title]}
+            />
+            <Line
+              type="linear"
+              dataKey={dataKey}
+              stroke={stroke}
+              dot={false}
+              strokeWidth={1.5}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
+}
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
             />
