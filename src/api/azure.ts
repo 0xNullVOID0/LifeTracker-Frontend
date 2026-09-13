@@ -1,9 +1,9 @@
-import {ApiError} from './client.ts'
+import {ApiError, getToken} from './client.ts'
 
 const TOKEN_KEY = 'lifetracker.azure.token'
 
 export function getAzureToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY)
+  return sessionStorage.getItem(TOKEN_KEY) ?? (import.meta.env.PROD ? getToken() : null)
 }
 
 export function setAzureToken(token: string) {
@@ -15,7 +15,7 @@ export function clearAzureToken() {
 }
 
 function azureUrl(path: string): string {
-  const base = import.meta.env.VITE_AZURE_API ?? '/azure-api'
+  const base = import.meta.env.VITE_AZURE_API ?? (import.meta.env.DEV ? '/azure-api' : '')
   return `${base}${path}`
 }
 
