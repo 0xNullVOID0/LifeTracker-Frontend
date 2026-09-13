@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react'
 import {getBuienradar} from '../api/buienradar.ts'
-import {getRoomClimate, getLocalRoomClimateAll} from '../api/climate.ts'
+import {getRoomClimate} from '../api/climate.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {IndoorOutdoorCharts} from '../charts.tsx'
@@ -133,9 +133,7 @@ async function loadIndoor(date: string): Promise<RoomClimateMeasurement[]> {
   } catch (caught) {
     if (!(caught instanceof ApiError) || (caught.status !== 404 && caught.status !== 405)) throw caught
   }
-
-  const all = await getLocalRoomClimateAll()
-  return (all ?? []).filter((row) => toIsoDateInZone(parseClimateTimestamp(row.timestamp)) === date)
+  return []
 }
 
 function newestIndoor(rows: RoomClimateMeasurement[]): RoomClimateMeasurement {
