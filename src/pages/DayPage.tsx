@@ -217,22 +217,16 @@ export function DayPage() {
                 {awake ? (
                   <>
                     <p>
-                      <span>Awake window</span>
-                      <strong>
-                        {awake.priorSleepID} → {awake.subsequentSleepID}
-                      </strong>
+                      <span>Awake for</span>
+                      <strong>{formatTimeSpan(awake.duration)}</strong>
                     </p>
                     <p>
-                      <span>Awake from</span>
+                      <span>From</span>
                       <strong>{formatTimestamp(awake.startLocal)}</strong>
                     </p>
                     <p>
-                      <span>Awake until</span>
+                      <span>Until</span>
                       <strong>{formatTimestamp(awake.endLocal)}</strong>
-                    </p>
-                    <p>
-                      <span>Awake for</span>
-                      <strong>{formatTimeSpan(awake.duration)}</strong>
                     </p>
                   </>
                 ) : !awakeError ? (

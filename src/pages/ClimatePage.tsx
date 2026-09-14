@@ -88,7 +88,7 @@ export function ClimatePage() {
         </button>
       </header>
 
-      <p className="lede">ESP32 measurements from the live Azure API. Garmin stays on your local API.</p>
+      <p className="lede">Local ESP32 room climate measurements from SCD40</p>
 
       {!azureToken ? (
         <form className="card" onSubmit={onAzureLogin}>

@@ -169,10 +169,8 @@ export function SleepPage() {
       {awake ? (
         <section className="card metrics">
           <p>
-            <span>Awake window</span>
-            <strong>
-              {awake.priorSleepID} → {awake.subsequentSleepID}
-            </strong>
+            <span>Awake for</span>
+            <strong>{formatTimeSpan(awake.duration)}</strong>
           </p>
           <p>
             <span>From</span>
@@ -181,11 +179,6 @@ export function SleepPage() {
           <p>
             <span>Until</span>
             <strong>{formatTimestamp(awake.endLocal)}</strong>
-          </p>
-          <p>
-            {/* TODO Duration or Awake for */}
-            <span>Awake for</span>
-            <strong>{formatTimeSpan(awake.duration)}</strong>
           </p>
         </section>
       ) : null}

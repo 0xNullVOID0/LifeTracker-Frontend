@@ -92,7 +92,7 @@ export function BuienradarPage() {
         </button>
       </header>
 
-      <p className="lede">Heino station measurements from the local API (synced about every 10 minutes).</p>
+      <p className="lede">Heino station measurements</p>
 
       <form className="toolbar" onSubmit={onSubmit}>
         <label>

@@ -79,7 +79,7 @@ export function InsideOutsidePage() {
         </button>
       </header>
 
-      <p className="lede">Local ESP32 room climate with Buienradar Heino temperature and humidity on the same charts.</p>
+      <p className="lede">Local ESP32 + SCD40 sensor room climate with Buienradar Heino temp/humidity correlation/comparison charts</p>
 
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
