@@ -398,7 +398,6 @@ function ClimateSeries({
   stroke,
   colors,
   scale,
-  yFloor,
 }: {
   title: string
   data: NumericPoint[]
