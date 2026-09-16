@@ -248,6 +248,20 @@ button.ghost {
   margin: 0 0 1rem;
 }
 
+.warning {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #c47d18;
+  background: color-mix(in srgb, #c47d18 16%, var(--card));
+  color: var(--text-h);
+}
+
+.warning-strong {
+  border-color: var(--error);
+  background: color-mix(in srgb, var(--error) 16%, var(--card));
+}
+
 .empty {
   margin: 0;
 }

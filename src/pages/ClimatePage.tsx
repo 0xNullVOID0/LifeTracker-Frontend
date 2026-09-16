@@ -88,7 +88,7 @@ export function ClimatePage() {
         </button>
       </header>
 
-      <p className="lede">Local ESP32 room climate measurements from SCD40</p>
+      <p className="lede">ESP32 measurements from the live Azure API. Garmin stays on your local API.</p>
 
       {!azureToken ? (
         <form className="card" onSubmit={onAzureLogin}>
@@ -128,6 +128,12 @@ export function ClimatePage() {
 
           {dayRows.length > 0 ? (
             <>
+              {/* Give warning for high CO2 levels for current date's data*/}
+              {requestedDate === toIsoDateInZone(new Date()) && Math.round(newest(dayRows).cO2) >= 800 ? (
+                <p className={Math.round(newest(dayRows).cO2) >= 1200 ? 'warning warning-strong' : 'warning'}>
+                  CO₂ is {Math.round(newest(dayRows).cO2)} ppm. Open a window.
+                </p>
+              ) : null}
               <section className="card metrics">
                 <p>
                   <span>Samples</span>
