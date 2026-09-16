@@ -315,16 +315,16 @@ function maskEsp32Calibration(points: ClimatePoint[]): ClimatePoint[] {
 export function RoomClimateCharts({ measurements }: { measurements: RoomClimateMeasurement[] }) {
   const colors = useChartColors()
   const data: ClimatePoint[] = breakLineGaps(
-    maskEsp32Calibration(
-      measurements
-        .map((row) => ({
-          t: parseClimateTimestamp(row.timestamp).getTime(),
-          temperature: row.temperature,
-          humidity: row.humidity,
-          co2: row.cO2,
-        }))
-        .filter((row) => Number.isFinite(row.t))
-        .sort((a, b) => a.t - b.t),
+      maskEsp32Calibration(
+        measurements
+          .map((row) => ({
+            t: parseClimateTimestamp(row.timestamp).getTime(),
+            temperature: row.temperature,
+            humidity: row.humidity,
+            co2: row.cO2,
+          }))
+          .filter((row) => Number.isFinite(row.t))
+          .sort((a, b) => a.t - b.t),
     ),
     (t) => ({ t, temperature: null, humidity: null, co2: null }),
   )
@@ -398,6 +398,7 @@ function ClimateSeries({
   stroke,
   colors,
   scale,
+  yFloor,
 }: {
   title: string
   data: NumericPoint[]
@@ -406,6 +407,7 @@ function ClimateSeries({
   stroke: string
   colors: ReturnType<typeof useChartColors>
   scale: 'co2' | 'decimal'
+  yFloor?: number
 }) {
   const values = data.map((row) => row[dataKey]).filter((value): value is number => value != null)
   if (values.length === 0) return null
@@ -475,15 +477,15 @@ export function IndoorOutdoorCharts({
 }) {
   const colors = useChartColors()
   const indoorPoints = maskEsp32Calibration(
-    indoor
-      .map((row) => ({
-        t: parseClimateTimestamp(row.timestamp).getTime(),
-        temperature: row.temperature,
-        humidity: row.humidity,
-        co2: row.cO2,
-      }))
-      .filter((row) => Number.isFinite(row.t))
-      .sort((a, b) => a.t - b.t),
+      indoor
+        .map((row) => ({
+          t: parseClimateTimestamp(row.timestamp).getTime(),
+          temperature: row.temperature,
+          humidity: row.humidity,
+          co2: row.cO2,
+        }))
+        .filter((row) => Number.isFinite(row.t))
+        .sort((a, b) => a.t - b.t),
   )
   const outdoorPoints = outdoor
     .map((row) => ({
@@ -691,6 +693,7 @@ export function BuienradarCharts({ measurements }: { measurements: BuienradarMea
         stroke={colors.avgLine}
         colors={colors}
         scale="decimal"
+        yFloor={0}
       />
       <ClimateSeries
         title="Wind"

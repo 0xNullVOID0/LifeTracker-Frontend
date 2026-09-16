@@ -1,11 +1,11 @@
-import {type FormEvent, useEffect, useMemo, useState} from 'react'
+import {type FormEvent, useEffect, useState} from 'react'
 import {getRoomClimate} from '../api/climate.ts'
 import {azureLogin, getAzureToken} from '../api/azure.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {RoomClimateCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
-import {parseClimateTimestamp, toIsoDateInZone} from '../dates.ts'
+import {toIsoDateInZone} from '../dates.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -27,7 +27,7 @@ export function ClimatePage() {
       setPending(true)
       setError(null)
       try {
-        const result = await getRoomClimate()
+        const result = await getRoomClimate(requestedDate)
         if (cancelled) return
         setRows(result ?? [])
       } catch (caught) {
@@ -50,12 +50,9 @@ export function ClimatePage() {
     return () => {
       cancelled = true
     }
-  }, [azureToken])
+  }, [azureToken, requestedDate])
 
-  const dayRows = useMemo(() => {
-    if (!rows) return []
-    return rows.filter((row) => toIsoDateInZone(parseClimateTimestamp(row.timestamp)) === requestedDate)
-  }, [rows, requestedDate])
+  const dayRows = rows ?? []
 
   async function onAzureLogin(event: FormEvent) {
     event.preventDefault()
@@ -88,7 +85,7 @@ export function ClimatePage() {
         </button>
       </header>
 
-      <p className="lede">ESP32 measurements from the live Azure API. Garmin stays on your local API.</p>
+      <p className="lede">Local ESP32 room climate measurements from SCD40</p>
 
       {!azureToken ? (
         <form className="card" onSubmit={onAzureLogin}>

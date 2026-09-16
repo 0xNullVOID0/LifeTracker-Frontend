@@ -5,7 +5,7 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {IndoorOutdoorCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
-import {parseClimateTimestamp, toIsoDateInZone} from '../dates.ts'
+import {toIsoDateInZone} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
@@ -125,15 +125,7 @@ export function InsideOutsidePage() {
 }
 
 async function loadIndoor(date: string): Promise<RoomClimateMeasurement[]> {
-  try {
-    const all = await getRoomClimate()
-    if (all && all.length > 0) {
-      return all.filter((row) => toIsoDateInZone(parseClimateTimestamp(row.timestamp)) === date)
-    }
-  } catch (caught) {
-    if (!(caught instanceof ApiError) || (caught.status !== 404 && caught.status !== 405)) throw caught
-  }
-  return []
+  return (await getRoomClimate(date)) ?? []
 }
 
 function newestIndoor(rows: RoomClimateMeasurement[]): RoomClimateMeasurement {
