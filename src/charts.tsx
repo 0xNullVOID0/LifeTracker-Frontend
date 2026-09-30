@@ -16,6 +16,8 @@ import type {BuienradarMeasurement} from './types/buienradar.ts'
 import type {RoomClimateMeasurement} from './types/climate.ts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
 
+// TODO split up all these charts into seperate files
+
 function useChartColors() {
   const [dark, setDark] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -239,9 +241,9 @@ export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
 export function StressTrendChart({ days }: { days: GarminDay[] }) {
   const colors = useChartColors()
   const data = days
-    .flatMap((day) =>
-      day.stress ? [{ date: day.date, average: day.stress.average, max: day.stress.max }] : [],
-    )
+      .flatMap((day) =>
+        day.stress ? [{ date: day.date, average: day.stress.average, max: day.stress.max }] : [],
+      )
     .sort((a, b) => a.date.localeCompare(b.date))
 
   if (data.length === 0) return null
@@ -325,8 +327,8 @@ export function RoomClimateCharts({ measurements }: { measurements: RoomClimateM
           }))
           .filter((row) => Number.isFinite(row.t))
           .sort((a, b) => a.t - b.t),
-    ),
-    (t) => ({ t, temperature: null, humidity: null, co2: null }),
+      ),
+      (t) => ({ t, temperature: null, humidity: null, co2: null }),
   )
 
   if (data.length === 0) return null
@@ -469,15 +471,15 @@ type ComparePoint = {
 
 function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarMeasurement[]): ComparePoint[] {
   const indoorPoints = maskEsp32Calibration(
-      indoor
-        .map((row) => ({
-          t: parseClimateTimestamp(row.timestamp).getTime(),
-          temperature: row.temperature,
-          humidity: row.humidity,
-          co2: row.cO2,
-        }))
-        .filter((row) => Number.isFinite(row.t))
-        .sort((a, b) => a.t - b.t),
+    indoor
+      .map((row) => ({
+        t: parseClimateTimestamp(row.timestamp).getTime(),
+        temperature: row.temperature,
+        humidity: row.humidity,
+        co2: row.cO2,
+      }))
+      .filter((row) => Number.isFinite(row.t))
+      .sort((a, b) => a.t - b.t),
   )
   const outdoorPoints = outdoor
     .map((row) => ({
@@ -488,19 +490,19 @@ function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarM
     .filter((row) => Number.isFinite(row.t))
     .sort((a, b) => a.t - b.t)
 
-    const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
-    const indoorTemp = seriesSamples(indoorPoints, 'temperature')
-    const indoorHumid = seriesSamples(indoorPoints, 'humidity')
-    const outdoorTemp = seriesSamples(outdoorPoints, 'temperature')
-    const outdoorHumid = seriesSamples(outdoorPoints, 'humidity')
+  const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
+  const indoorTemp = seriesSamples(indoorPoints, 'temperature')
+  const indoorHumid = seriesSamples(indoorPoints, 'humidity')
+  const outdoorTemp = seriesSamples(outdoorPoints, 'temperature')
+  const outdoorHumid = seriesSamples(outdoorPoints, 'humidity')
 
   return times.map((t) => ({
     t,
-      indoorTemp: valueOnSeries(indoorTemp, t),
-      indoorHumid: valueOnSeries(indoorHumid, t),
-      outdoorTemp: valueOnSeries(outdoorTemp, t),
-      outdoorHumid: valueOnSeries(outdoorHumid, t),
-    }))
+    indoorTemp: valueOnSeries(indoorTemp, t),
+    indoorHumid: valueOnSeries(indoorHumid, t),
+    outdoorTemp: valueOnSeries(outdoorTemp, t),
+    outdoorHumid: valueOnSeries(outdoorHumid, t),
+  }))
 }
 
 export function IndoorOutdoorCharts({
@@ -778,27 +780,27 @@ function RainBars({
 export function BuienradarCharts({ measurements }: { measurements: BuienradarMeasurement[] }) {
   const colors = useChartColors()
   const data: WeatherPoint[] = breakLineGaps(
-    measurements
-      .map((row): WeatherPoint => ({
-        t: new Date(row.timestamp).getTime(),
-        temperature: row.temperature,
-        humidity: row.humidity,
-        precipitation: row.precipitation,
-        windspeed: row.windspeed,
-        sunpower: row.sunpower,
-        airpressure: row.airpressure,
-      }))
-      .filter((row) => Number.isFinite(row.t))
-      .sort((a, b) => a.t - b.t),
-    (t) => ({
-      t,
-      temperature: null,
-      humidity: null,
-      precipitation: null,
-      windspeed: null,
-      sunpower: null,
-      airpressure: null,
-    }),
+      measurements
+        .map((row): WeatherPoint => ({
+          t: new Date(row.timestamp).getTime(),
+          temperature: row.temperature,
+          humidity: row.humidity,
+          precipitation: row.precipitation,
+          windspeed: row.windspeed,
+          sunpower: row.sunpower,
+          airpressure: row.airpressure,
+        }))
+        .filter((row) => Number.isFinite(row.t))
+        .sort((a, b) => a.t - b.t),
+      (t) => ({
+        t,
+        temperature: null,
+        humidity: null,
+        precipitation: null,
+        windspeed: null,
+        sunpower: null,
+        airpressure: null,
+      }),
   )
 
   if (data.length === 0) return null

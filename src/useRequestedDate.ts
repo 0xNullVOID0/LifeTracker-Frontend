@@ -13,14 +13,20 @@ export function useRequestedDate() {
     setDate(requestedDate)
   }
 
+  function writeDate(next: string) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('date', next)
+    setSearchParams(nextParams, { replace: true })
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault()
-    setSearchParams({ date }, { replace: true })
+    writeDate(date)
   }
 
   function requestDate(next: string) {
     setDate(next)
-    setSearchParams({ date: next }, { replace: true })
+    writeDate(next)
   }
 
   return { date, setDate, requestedDate, onSubmit, requestDate }

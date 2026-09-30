@@ -2,7 +2,11 @@ import {azureFetch} from './azure.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {dateQuery} from '../dates.ts'
 
-export function getRoomClimate(date: string): Promise<RoomClimateMeasurement[] | null> {
+export function getRoomClimate(): Promise<RoomClimateMeasurement[] | null> {
+  return azureFetch<RoomClimateMeasurement[]>('/api/room-climate')
+}
+
+export function getRoomClimateByDay(date: string): Promise<RoomClimateMeasurement[] | null> {
   return azureFetch<RoomClimateMeasurement[]>(`/api/room-climate/day${dateQuery(date)}`)
 }
 

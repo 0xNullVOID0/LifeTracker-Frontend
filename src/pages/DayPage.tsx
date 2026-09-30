@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useState} from 'react'
 import {Link} from 'react-router-dom'
 import {getAwakeWindow, getGarminDay, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
@@ -6,6 +6,8 @@ import {useAuth} from '../auth/AuthProvider.tsx'
 import {DatePicker} from '../DatePicker.tsx'
 import {dateQuery} from '../dates.ts'
 import type {AwakeWindow, GarminDay} from '../types/garmin.ts'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 import {StoredDays} from './StoredDays.tsx'
@@ -47,58 +49,59 @@ export function DayPage() {
   const [error, setError] = useState<string | null>(null)
   const [daysError, setDaysError] = useState<string | null>(null)
   const [awakeError, setAwakeError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setPending(true)
-      setError(null)
-      setDaysError(null)
-      setAwakeError(null)
-      setEmpty(false)
-
-      try {
-        const [dayOutcome, daysOutcome, awakeOutcome] = await Promise.allSettled([
-          getGarminDay(requestedDate),
-          getGarminDays(),
-          getAwakeWindow(requestedDate),
-        ])
-        if (cancelled) return
-
-        if (dayOutcome.status === 'fulfilled') {
-          setData(dayOutcome.value)
-          setEmpty(dayOutcome.value === null)
-        } else {
-          setData(null)
-          setEmpty(false)
-          setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
-        }
-
-        if (daysOutcome.status === 'fulfilled') {
-          setDays(daysOutcome.value ?? [])
-        } else {
-          setDays([])
-          setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
-        }
-
-        if (awakeOutcome.status === 'fulfilled') {
-          setAwake(awakeOutcome.value)
-        } else {
-          setAwake(null)
-          setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
-        }
-      } finally {
-        if (!cancelled) setPending(false)
+  const { pending, updateNow } = useLiveRefresh(
+    requestedDate,
+    async ({ mode, isCurrent }) => {
+      if (mode === 'initial') {
+        setData(null)
+        setAwake(null)
+        setError(null)
+        setDaysError(null)
+        setAwakeError(null)
+        setEmpty(false)
       }
-    }
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [requestedDate])
+      const [dayOutcome, daysOutcome, awakeOutcome] = await Promise.allSettled([
+        getGarminDay(requestedDate),
+        getGarminDays(),
+        mode === 'poll' ? Promise.resolve(null) : getAwakeWindow(requestedDate),
+      ])
+      if (!isCurrent()) return
+
+      if (dayOutcome.status === 'fulfilled') {
+        setData(dayOutcome.value)
+        setEmpty(dayOutcome.value === null)
+        setError(null)
+      } else if (mode === 'poll') {
+        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
+      } else {
+        setData(null)
+        setEmpty(false)
+        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
+      }
+
+      if (daysOutcome.status === 'fulfilled') {
+        setDays(daysOutcome.value ?? [])
+        setDaysError(null)
+      } else if (mode === 'poll') {
+        setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
+      } else {
+        setDays([])
+        setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
+      }
+
+      if (mode === 'poll') return
+
+      if (awakeOutcome.status === 'fulfilled') {
+        setAwake(awakeOutcome.value)
+        setAwakeError(null)
+      } else {
+        setAwake(null)
+        setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
+      }
+    },
+    liveSlowMs,
+  )
 
   return (
     <main className="page">
@@ -117,9 +120,13 @@ export function DayPage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+          <button type="submit" disabled={pending}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending} />
+        </div>
       </form>
 
       {error ? <p className="error">{error}</p> : null}
@@ -217,16 +224,22 @@ export function DayPage() {
                 {awake ? (
                   <>
                     <p>
-                      <span>Awake for</span>
-                      <strong>{formatTimeSpan(awake.duration)}</strong>
+                      <span>Awake window</span>
+                      <strong>
+                        {awake.priorSleepID} → {awake.subsequentSleepID}
+                      </strong>
                     </p>
                     <p>
-                      <span>From</span>
+                      <span>Awake from</span>
                       <strong>{formatTimestamp(awake.startLocal)}</strong>
                     </p>
                     <p>
-                      <span>Until</span>
+                      <span>Awake until</span>
                       <strong>{formatTimestamp(awake.endLocal)}</strong>
+                    </p>
+                    <p>
+                      <span>Awake for</span>
+                      <strong>{formatTimeSpan(awake.duration)}</strong>
                     </p>
                   </>
                 ) : !awakeError ? (

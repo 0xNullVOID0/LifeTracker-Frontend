@@ -1,10 +1,13 @@
-import {useEffect, useState} from 'react'
-import {getAwakeWindow, getDailySleep} from '../api/garmin.ts'
+import {useMemo, useState} from 'react'
+import {getAwakeWindow, getDailySleep, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import type {AwakeWindow, DailySleep} from '../types/garmin.ts'
+import type {AwakeWindow, DailySleep, GarminDay} from '../types/garmin.ts'
 import {SleepStagesChart} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
+import {formatSeconds} from '../dates.ts'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -12,12 +15,6 @@ function formatTimestamp(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString()
-}
-
-function formatSeconds(total: number): string {
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 function formatTimeSpan(value: string): string {
@@ -43,55 +40,58 @@ export function SleepPage() {
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [awakeError, setAwakeError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [days, setDays] = useState<GarminDay[]>([])
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setPending(true)
+  const { pending, updateNow } = useLiveRefresh(
+    requestedDate,
+    async ({ mode, isCurrent }) => {
+      if (mode === 'initial') {
+        setData(null)
+        setAwake(null)
+      }
       setError(null)
       setAwakeError(null)
       setEmpty(false)
 
-      try {
-        const [sleepOutcome, awakeOutcome] = await Promise.allSettled([
-          getDailySleep(requestedDate),
-          getAwakeWindow(requestedDate),
-        ])
-        if (cancelled) return
+      const [sleepOutcome, awakeOutcome, daysOutcome] = await Promise.allSettled([
+        getDailySleep(requestedDate),
+        getAwakeWindow(requestedDate),
+        getGarminDays(),
+      ])
+      if (!isCurrent()) return
 
-        if (sleepOutcome.status === 'fulfilled') {
-          setData(sleepOutcome.value)
-          setEmpty(sleepOutcome.value === null)
-        } else {
-          setData(null)
-          setEmpty(false)
-          setError(loadErrorMessage(sleepOutcome.reason, 'Could not load sleep'))
-        }
-
-        if (awakeOutcome.status === 'fulfilled') {
-          setAwake(awakeOutcome.value)
-        } else {
-          setAwake(null)
-          setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
-        }
-      } finally {
-        if (!cancelled) setPending(false)
+      if (sleepOutcome.status === 'fulfilled') {
+        setData(sleepOutcome.value)
+        setEmpty(sleepOutcome.value === null)
+      } else {
+        setData(null)
+        setEmpty(false)
+        setError(loadErrorMessage(sleepOutcome.reason, 'Could not load sleep'))
       }
-    }
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [requestedDate])
+      if (awakeOutcome.status === 'fulfilled') {
+        setAwake(awakeOutcome.value)
+        setAwakeError(null)
+      } else {
+        setAwake(null)
+        setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
+      }
+
+      if (daysOutcome.status === 'fulfilled') setDays(daysOutcome.value ?? [])
+    },
+    null,
+  )
+
+  const weekNights = useMemo(() => {
+    const map = sleepByDate(days)
+    return weekDates(requestedDate).map((date) => ({ date, sleep: map.get(date) ?? null }))
+  }, [days, requestedDate])
 
   return (
     <main className="page wide">
       <header className="topbar">
         <div>
-          <h1>Daily sleep</h1>
+          <h1>Sleep</h1>
           <GarminNav />
         </div>
         <button type="button" className="ghost" onClick={logout}>
@@ -104,13 +104,19 @@ export function SleepPage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+          <button type="submit" disabled={pending}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending} />
+        </div>
       </form>
 
       {error ? <p className="error">{error}</p> : null}
       {awakeError ? <p className="error">{awakeError}</p> : null}
+
+      <SleepWeekChart nights={weekNights} selected={requestedDate} onSelect={requestDate} />
 
       {empty && !error ? (
         <p className="empty">
@@ -169,8 +175,10 @@ export function SleepPage() {
       {awake ? (
         <section className="card metrics">
           <p>
-            <span>Awake for</span>
-            <strong>{formatTimeSpan(awake.duration)}</strong>
+            <span>Awake window</span>
+            <strong>
+              {awake.priorSleepID} → {awake.subsequentSleepID}
+            </strong>
           </p>
           <p>
             <span>From</span>
@@ -179,6 +187,11 @@ export function SleepPage() {
           <p>
             <span>Until</span>
             <strong>{formatTimestamp(awake.endLocal)}</strong>
+          </p>
+          <p>
+            {/* TODO Duration or Awake for */}
+            <span>Awake for</span>
+            <strong>{formatTimeSpan(awake.duration)}</strong>
           </p>
         </section>
       ) : null}

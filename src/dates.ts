@@ -50,6 +50,14 @@ export function toIsoDateInZone(value: Date, timeZone = appTimeZone): string {
   }).format(value)
 }
 
+export function formatSeconds(total: number): string {
+  const sign = total < 0 ? '-' : ''
+  const abs = Math.abs(Math.round(total))
+  const hours = Math.floor(abs / 3600)
+  const minutes = Math.floor((abs % 3600) / 60)
+  return `${sign}${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
 export function parseClimateTimestamp(iso: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(iso)
   if (!match) return new Date(iso)

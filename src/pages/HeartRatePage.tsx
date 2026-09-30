@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useState} from 'react'
 import {getDailyHeartRate, getDailySleep} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
@@ -6,6 +6,8 @@ import type {DailyHeartRate, DailySleep} from '../types/garmin.ts'
 import {HeartRateChart, type SleepWindow} from '../charts.tsx'
 import {addDays} from '../dates.ts'
 import {DatePicker} from '../DatePicker.tsx'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -29,52 +31,50 @@ export function HeartRatePage() {
   const [sleepWindows, setSleepWindows] = useState<SleepWindow[]>([])
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setPending(true)
-      setError(null)
-      setEmpty(false)
-      try {
-        const nextDate = addDays(requestedDate, 1)
-        const [heartOutcome, sleepToday, sleepTomorrow] = await Promise.allSettled([
-          getDailyHeartRate(requestedDate),
-          getDailySleep(requestedDate),
-          getDailySleep(nextDate),
-        ])
-        if (cancelled) return
-
-        if (heartOutcome.status === 'fulfilled') {
-          setData(heartOutcome.value)
-          setEmpty(heartOutcome.value === null)
-          setError(null)
-        } else {
-          setData(null)
-          setEmpty(false)
-          const caught = heartOutcome.reason
-          setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
-        }
-
-        const windows: SleepWindow[] = []
-        for (const outcome of [sleepToday, sleepTomorrow]) {
-          if (outcome.status !== 'fulfilled' || !outcome.value) continue
-          const window = sleepWindowFromSleep(outcome.value)
-          if (window) windows.push(window)
-        }
-        setSleepWindows(windows)
-      } finally {
-        if (!cancelled) setPending(false)
+  const { pending, updateNow } = useLiveRefresh(
+    requestedDate,
+    async ({ mode, isCurrent }) => {
+      if (mode === 'initial') {
+        setData(null)
+        setSleepWindows([])
+        setError(null)
+        setEmpty(false)
       }
-    }
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [requestedDate])
+      const nextDate = addDays(requestedDate, 1)
+      const [heartOutcome, sleepToday, sleepTomorrow] = await Promise.allSettled([
+        getDailyHeartRate(requestedDate),
+        mode === 'poll' ? Promise.resolve(null) : getDailySleep(requestedDate),
+        mode === 'poll' ? Promise.resolve(null) : getDailySleep(nextDate),
+      ])
+      if (!isCurrent()) return
+
+      if (heartOutcome.status === 'fulfilled') {
+        setData(heartOutcome.value)
+        setEmpty(heartOutcome.value === null)
+        setError(null)
+      } else if (mode === 'poll') {
+        const caught = heartOutcome.reason
+        setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
+      } else {
+        setData(null)
+        setEmpty(false)
+        const caught = heartOutcome.reason
+        setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
+      }
+
+      if (mode === 'poll') return
+
+      const windows: SleepWindow[] = []
+      for (const outcome of [sleepToday, sleepTomorrow]) {
+        if (outcome.status !== 'fulfilled' || !outcome.value) continue
+        const window = sleepWindowFromSleep(outcome.value)
+        if (window) windows.push(window)
+      }
+      setSleepWindows(windows)
+    },
+    liveSlowMs,
+  )
 
   return (
     <main className="page wide">
@@ -93,9 +93,13 @@ export function HeartRatePage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+          <button type="submit" disabled={pending}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending} />
+        </div>
       </form>
 
       {error ? <p className="error">{error}</p> : null}

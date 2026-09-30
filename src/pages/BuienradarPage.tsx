@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useMemo, useState} from 'react'
 import {getBuienradar, syncBuienradar} from '../api/buienradar.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
@@ -6,6 +6,8 @@ import {BuienradarCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
 import {toIsoDateInZone} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -14,48 +16,24 @@ export function BuienradarPage() {
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [rows, setRows] = useState<BuienradarMeasurement[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(true)
+  const [syncing, setSyncing] = useState(false)
 
-  async function load() {
-    setPending(true)
-    setError(null)
-    try {
-      const result = await getBuienradar()
-      setRows(result ?? [])
-    } catch (caught) {
-      setRows(null)
-      if (caught instanceof ApiError) {
-        setError(caught.message)
-      } else {
-        setError('Could not load Buienradar')
+  const { pending, updateNow } = useLiveRefresh(
+    'buienradar',
+    async ({ mode, isCurrent }) => {
+      try {
+        const result = await getBuienradar()
+        if (!isCurrent()) return
+        setRows(result ?? [])
+        setError(null)
+      } catch (caught) {
+        if (!isCurrent()) return
+        if (mode === 'initial') setRows(null)
+        setError(caught instanceof ApiError ? caught.message : 'Could not load Buienradar')
       }
-    } finally {
-      setPending(false)
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    getBuienradar()
-      .then((result) => {
-        if (!cancelled) setRows(result ?? [])
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
-        setRows(null)
-        if (caught instanceof ApiError) {
-          setError(caught.message)
-        } else {
-          setError('Could not load Buienradar')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setPending(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    },
+    liveMinuteMs,
+  )
 
   const dayRows = useMemo(() => {
     if (!rows) return []
@@ -65,18 +43,15 @@ export function BuienradarPage() {
   const latest = dayRows.length > 0 ? newest(dayRows) : null
 
   async function onSync() {
-    setPending(true)
+    setSyncing(true)
     setError(null)
     try {
       await syncBuienradar()
-      await load()
+      updateNow()
     } catch (caught) {
-      if (caught instanceof ApiError) {
-        setError(caught.message)
-      } else {
-        setError('Buienradar sync failed')
-      }
-      setPending(false)
+      setError(caught instanceof ApiError ? caught.message : 'Buienradar sync failed')
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -99,12 +74,16 @@ export function BuienradarPage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
-        <button type="button" className="ghost" onClick={() => void onSync()} disabled={pending}>
-          Sync now
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending || syncing} />
+          <button type="submit" disabled={pending || syncing}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending || syncing} />
+          <button type="button" className="ghost" onClick={() => void onSync()} disabled={pending || syncing}>
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
       </form>
 
       {error ? <p className="error">{error}</p> : null}

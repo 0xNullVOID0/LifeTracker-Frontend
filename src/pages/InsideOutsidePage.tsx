@@ -1,13 +1,15 @@
-import {useEffect, useMemo, useState} from 'react'
+import {useMemo, useState} from 'react'
 import {getBuienradar} from '../api/buienradar.ts'
 import {getRoomClimate} from '../api/climate.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {IndoorOutdoorCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
-import {toIsoDateInZone} from '../dates.ts'
+import {parseClimateTimestamp, toIsoDateInZone} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -18,46 +20,43 @@ export function InsideOutsidePage() {
   const [outdoor, setOutdoor] = useState<BuienradarMeasurement[]>([])
   const [indoorError, setIndoorError] = useState<string | null>(null)
   const [outdoorError, setOutdoorError] = useState<string | null>(null)
-  const [pending, setPending] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-
-    loadIndoor(requestedDate)
-      .then((rows) => {
-        if (cancelled) return
-        setIndoorError(null)
-        setIndoor(rows)
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
+  const { pending, updateNow } = useLiveRefresh(
+    requestedDate,
+    async ({ mode, isCurrent }) => {
+      if (mode === 'initial') {
         setIndoor([])
-        setIndoorError(caught instanceof ApiError ? caught.message : 'Could not load local room climate')
-      })
-      .finally(() => {
-        if (!cancelled) setPending(false)
-      })
+        setIndoorError(null)
+        setOutdoorError(null)
+      }
 
-    return () => {
-      cancelled = true
-    }
-  }, [requestedDate])
+      const [indoorOutcome, outdoorOutcome] = await Promise.allSettled([
+        loadIndoor(requestedDate),
+        getBuienradar(),
+      ])
+      if (!isCurrent()) return
 
-  useEffect(() => {
-    let cancelled = false
-    getBuienradar()
-      .then((rows) => {
-        if (!cancelled) setOutdoor(rows ?? [])
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
+      if (indoorOutcome.status === 'fulfilled') {
+        setIndoor(indoorOutcome.value)
+        setIndoorError(null)
+      } else if (mode === 'poll') {
+        setIndoorError(indoorOutcome.reason instanceof ApiError ? indoorOutcome.reason.message : 'Could not load local room climate')
+      } else {
+        setIndoor([])
+        setIndoorError(indoorOutcome.reason instanceof ApiError ? indoorOutcome.reason.message : 'Could not load local room climate')
+      }
+
+      if (outdoorOutcome.status === 'fulfilled') {
+        setOutdoor(outdoorOutcome.value ?? [])
+        setOutdoorError(null)
+      } else if (mode === 'poll') {
+        setOutdoorError(outdoorOutcome.reason instanceof ApiError ? outdoorOutcome.reason.message : 'Could not load Buienradar')
+      } else {
         setOutdoor([])
-        setOutdoorError(caught instanceof ApiError ? caught.message : 'Could not load Buienradar')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+        setOutdoorError(outdoorOutcome.reason instanceof ApiError ? outdoorOutcome.reason.message : 'Could not load Buienradar')
+      }
+    },
+    liveMinuteMs,
+  )
 
   const outdoorDay = useMemo(
     () => outdoor.filter((row) => toIsoDateInZone(new Date(row.timestamp)) === requestedDate),
@@ -86,9 +85,13 @@ export function InsideOutsidePage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+          <button type="submit" disabled={pending}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending} />
+        </div>
       </form>
 
       {indoorError ? <p className="error">Indoor: {indoorError}</p> : null}
@@ -125,7 +128,15 @@ export function InsideOutsidePage() {
 }
 
 async function loadIndoor(date: string): Promise<RoomClimateMeasurement[]> {
-  return (await getRoomClimate(date)) ?? []
+  try {
+    const all = await getRoomClimate()
+    if (all && all.length > 0) {
+      return all.filter((row) => toIsoDateInZone(parseClimateTimestamp(row.timestamp)) === date)
+    }
+  } catch (caught) {
+    if (!(caught instanceof ApiError) || (caught.status !== 404 && caught.status !== 405)) throw caught
+  }
+  return []
 }
 
 function newestIndoor(rows: RoomClimateMeasurement[]): RoomClimateMeasurement {

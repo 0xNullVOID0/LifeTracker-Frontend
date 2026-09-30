@@ -1,12 +1,14 @@
-import {type FormEvent, useEffect, useState} from 'react'
-import {getRoomClimate} from '../api/climate.ts'
+import {type FormEvent, useState} from 'react'
+import {getRoomClimateByDay} from '../api/climate.ts'
 import {azureLogin, getAzureToken} from '../api/azure.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {RoomClimateCharts} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
-import {toIsoDateInZone} from '../dates.ts'
+import {todayLocal} from '../dates.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -17,47 +19,39 @@ export function ClimatePage() {
   const [azurePassword, setAzurePassword] = useState('')
   const [rows, setRows] = useState<RoomClimateMeasurement[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
-  useEffect(() => {
-    if (!azureToken) return
-    let cancelled = false
-
-    async function load() {
-      setPending(true)
-      setError(null)
+  const refreshKey = `${azureToken ?? 'none'}:${requestedDate}`
+  const { pending, updateNow } = useLiveRefresh(
+    refreshKey,
+    async ({ mode, isCurrent }) => {
+      if (!azureToken) return
       try {
-        const result = await getRoomClimate(requestedDate)
-        if (cancelled) return
+        const result = await getRoomClimateByDay(requestedDate)
+        if (!isCurrent()) return
         setRows(result ?? [])
+        setError(null)
       } catch (caught) {
-        if (cancelled) return
-        setRows(null)
+        if (!isCurrent()) return
         if (caught instanceof ApiError && caught.status === 401) {
+          setRows(null)
           setAzureToken(null)
           setError('Azure session expired. Sign in again.')
-        } else if (caught instanceof ApiError) {
-          setError(caught.message)
-        } else {
-          setError('Could not load room climate from Azure')
+          return
         }
-      } finally {
-        if (!cancelled) setPending(false)
+        if (mode === 'initial') setRows(null)
+        setError(caught instanceof ApiError ? caught.message : 'Could not load room climate from Azure')
       }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [azureToken, requestedDate])
+    },
+    azureToken && requestedDate === todayLocal() ? liveMinuteMs : null,
+  )
 
   const dayRows = rows ?? []
 
   async function onAzureLogin(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    setPending(true)
+    setSigningIn(true)
     try {
       await azureLogin(azurePassword)
       setAzureToken(getAzureToken())
@@ -69,7 +63,7 @@ export function ClimatePage() {
         setError('Azure login failed')
       }
     } finally {
-      setPending(false)
+      setSigningIn(false)
     }
   }
 
@@ -85,7 +79,7 @@ export function ClimatePage() {
         </button>
       </header>
 
-      <p className="lede">Local ESP32 room climate measurements from SCD40</p>
+      <p className="lede">ESP32 measurements from the live Azure API. Garmin stays on your local API.</p>
 
       {!azureToken ? (
         <form className="card" onSubmit={onAzureLogin}>
@@ -101,8 +95,8 @@ export function ClimatePage() {
             />
           </label>
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={pending}>
-            {pending ? 'Signing in…' : 'Sign in to Azure'}
+          <button type="submit" disabled={signingIn}>
+            {signingIn ? 'Signing in…' : 'Sign in to Azure'}
           </button>
         </form>
       ) : (
@@ -112,9 +106,13 @@ export function ClimatePage() {
               Date
               <DatePicker value={date} onChange={requestDate} disabled={pending} />
             </label>
-            <button type="submit" disabled={pending}>
-              {pending ? 'Loading…' : 'Load'}
-            </button>
+            <div className="toolbar-actions">
+              <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+              <button type="submit" disabled={pending}>
+                {pending ? 'Loading…' : 'Load'}
+              </button>
+              <UpdateNowButton onClick={updateNow} pending={pending} />
+            </div>
           </form>
 
           {error ? <p className="error">{error}</p> : null}
@@ -125,8 +123,7 @@ export function ClimatePage() {
 
           {dayRows.length > 0 ? (
             <>
-              {/* Give warning for high CO2 levels for current date's data*/}
-              {requestedDate === toIsoDateInZone(new Date()) && Math.round(newest(dayRows).cO2) >= 800 ? (
+              {Math.round(newest(dayRows).cO2) >= 800 ? (
                 <p className={Math.round(newest(dayRows).cO2) >= 1200 ? 'warning warning-strong' : 'warning'}>
                   CO₂ is {Math.round(newest(dayRows).cO2)} ppm. Open a window.
                 </p>

@@ -1,10 +1,12 @@
-﻿import {useEffect, useState} from 'react'
+﻿import {useState} from 'react'
 import {getDailyStress, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyStress, GarminDay} from '../types/garmin.ts'
 import {StressTrendChart} from '../charts.tsx'
 import {DatePicker} from '../DatePicker.tsx'
+import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -15,40 +17,41 @@ export function StressPage() {
   const [empty, setEmpty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [days, setDays] = useState<GarminDay[]>([])
-  const [pending, setPending] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setPending(true)
-      setError(null)
-      setEmpty(false)
-      try {
-        const [result, allDays] = await Promise.all([getDailyStress(requestedDate), getGarminDays()])
-        if (cancelled) return
-        setData(result)
-        setEmpty(result === null)
-        setDays(allDays ?? [])
-      } catch (caught) {
-        if (cancelled) return
+  const { pending, updateNow } = useLiveRefresh(
+    requestedDate,
+    async ({ mode, isCurrent }) => {
+      if (mode === 'initial') {
         setData(null)
-        setDays([])
-        if (caught instanceof ApiError) {
-          setError(caught.message)
-        } else {
-          setError('Could not load stress')
-        }
-      } finally {
-        if (!cancelled) setPending(false)
+        setError(null)
+        setEmpty(false)
       }
-    }
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [requestedDate])
+      const [stressOutcome, daysOutcome] = await Promise.allSettled([
+        getDailyStress(requestedDate),
+        getGarminDays(),
+      ])
+      if (!isCurrent()) return
+
+      if (stressOutcome.status === 'fulfilled') {
+        setData(stressOutcome.value)
+        setEmpty(stressOutcome.value === null)
+        setError(null)
+      } else if (mode === 'poll') {
+        setError(stressOutcome.reason instanceof ApiError ? stressOutcome.reason.message : 'Could not load stress')
+      } else {
+        setData(null)
+        setEmpty(false)
+        setError(stressOutcome.reason instanceof ApiError ? stressOutcome.reason.message : 'Could not load stress')
+      }
+
+      if (daysOutcome.status === 'fulfilled') {
+        setDays(daysOutcome.value ?? [])
+      } else if (mode !== 'poll') {
+        setDays([])
+      }
+    },
+    liveSlowMs,
+  )
 
   return (
     <main className="page wide">
@@ -67,9 +70,13 @@ export function StressPage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
-        <button type="submit" disabled={pending}>
-          {pending ? 'Loading…' : 'Load'}
-        </button>
+        <div className="toolbar-actions">
+          <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
+          <button type="submit" disabled={pending}>
+            {pending ? 'Loading…' : 'Load'}
+          </button>
+          <UpdateNowButton onClick={updateNow} pending={pending} />
+        </div>
       </form>
 
       {error ? <p className="error">{error}</p> : null}
