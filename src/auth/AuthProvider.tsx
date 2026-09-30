@@ -2,6 +2,7 @@
 import {useNavigate} from 'react-router-dom'
 import {login as requestToken} from '../api/auth.ts'
 import {clearToken, getToken, setToken, setUnauthorizedHandler} from '../api/client.ts'
+import {loginHref} from '../returnPath.ts'
 
 type AuthContextValue = {
   token: string | null
@@ -19,7 +20,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setTokenState(null)
-      navigate('/login', { replace: true })
+      if (window.location.pathname === '/login') return
+      const here = `${window.location.pathname}${window.location.search}`
+      navigate(loginHref(here), { replace: true })
     })
     return () => setUnauthorizedHandler(undefined)
   }, [navigate])

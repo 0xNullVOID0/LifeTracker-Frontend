@@ -1,16 +1,19 @@
 ﻿import {type FormEvent, useState} from 'react'
-import {Navigate, useNavigate} from 'react-router-dom'
+import {Navigate, useNavigate, useSearchParams} from 'react-router-dom'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
+import {returnPath} from '../returnPath.ts'
 
 export function LoginPage() {
   const { token, login } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const next = returnPath(params.get('next'))
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  if (token) return <Navigate to="/day" replace />
+  if (token) return <Navigate to={next} replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -18,7 +21,7 @@ export function LoginPage() {
     setPending(true)
     try {
       await login(password)
-      navigate('/day', { replace: true })
+      navigate(next, { replace: true })
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         setError('Wrong password')
@@ -35,7 +38,7 @@ export function LoginPage() {
   return (
     <main className="page">
       <h1>LifeTracker</h1>
-      <p className="lede">Sign in with the API password (Compose / Development: demo).</p>
+      <p className="lede">For this demo environment password is "demo".</p>
       <form className="card" onSubmit={onSubmit}>
         <label>
           Password

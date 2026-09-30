@@ -1,5 +1,6 @@
-import {Navigate, Route, Routes} from 'react-router-dom'
+import {Navigate, Route, Routes, useLocation} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
+import {loginHref} from './returnPath.ts'
 import {BuienradarPage} from './pages/BuienradarPage.tsx'
 import {ClimatePage} from './pages/ClimatePage.tsx'
 import {DayPage} from './pages/DayPage.tsx'
@@ -12,7 +13,8 @@ import type {ReactNode} from 'react'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { token } = useAuth()
-  if (!token) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!token) return <Navigate to={loginHref(`${location.pathname}${location.search}`)} replace />
   return children
 }
 
