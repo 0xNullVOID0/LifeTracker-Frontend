@@ -467,14 +467,7 @@ type ComparePoint = {
   outdoorHumid: number | null
 }
 
-export function IndoorOutdoorCharts({
-  indoor,
-  outdoor,
-}: {
-  indoor: RoomClimateMeasurement[]
-  outdoor: BuienradarMeasurement[]
-}) {
-  const colors = useChartColors()
+function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarMeasurement[]): ComparePoint[] {
   const indoorPoints = maskEsp32Calibration(
       indoor
         .map((row) => ({
@@ -495,22 +488,30 @@ export function IndoorOutdoorCharts({
     .filter((row) => Number.isFinite(row.t))
     .sort((a, b) => a.t - b.t)
 
-  const data: ComparePoint[] = [
-    ...indoorPoints.map((row) => ({
-      t: row.t,
-      indoorTemp: row.temperature,
-      indoorHumid: row.humidity,
-      outdoorTemp: null,
-      outdoorHumid: null,
-    })),
-    ...outdoorPoints.map((row) => ({
-      t: row.t,
-      indoorTemp: null,
-      indoorHumid: null,
-      outdoorTemp: row.temperature,
-      outdoorHumid: row.humidity,
-    })),
-  ].sort((a, b) => a.t - b.t)
+    const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
+    const indoorTemp = seriesSamples(indoorPoints, 'temperature')
+    const indoorHumid = seriesSamples(indoorPoints, 'humidity')
+    const outdoorTemp = seriesSamples(outdoorPoints, 'temperature')
+    const outdoorHumid = seriesSamples(outdoorPoints, 'humidity')
+
+  return times.map((t) => ({
+    t,
+      indoorTemp: valueOnSeries(indoorTemp, t),
+      indoorHumid: valueOnSeries(indoorHumid, t),
+      outdoorTemp: valueOnSeries(outdoorTemp, t),
+      outdoorHumid: valueOnSeries(outdoorHumid, t),
+    }))
+}
+
+export function IndoorOutdoorCharts({
+  indoor,
+  outdoor,
+}: {
+  indoor: RoomClimateMeasurement[]
+  outdoor: BuienradarMeasurement[]
+}) {
+  const colors = useChartColors()
+  const data = buildCompareData(indoor, outdoor)
 
   if (data.length === 0) return null
 
@@ -534,6 +535,33 @@ export function IndoorOutdoorCharts({
       />
     </>
   )
+}
+
+function seriesSamples(
+  points: { t: number; temperature: number | null; humidity: number | null }[],
+  key: 'temperature' | 'humidity') : { t: number; v: number }[] {
+  return points.flatMap((point) => {
+    const value = point[key]
+    return value == null ? [] : [{ t: point.t, v: value }]
+  })
+}
+
+function valueOnSeries(samples: { t: number; v: number }[], t: number): number | null {
+  if (samples.length === 0 || t < samples[0].t || t > samples[samples.length - 1].t) return null
+  let lo = 0
+  let hi = samples.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (samples[mid].t < t) lo = mid + 1
+    else hi = mid
+  }
+  const right = samples[lo]
+  if (right.t === t || lo === 0) return right.v
+  const left = samples[lo - 1]
+  const span = right.t - left.t
+  if (span <= 0) return left.v
+  const fraction = (t - left.t) / span
+  return left.v + (right.v - left.v) * fraction
 }
 
 function CompareSeries({
@@ -587,23 +615,14 @@ function CompareSeries({
               width={44}
             />
             <Tooltip
-              content={({ active, payload, label }) => {
-                if (!active || !payload?.length) return null
-                const indoor = payload.find((entry) => entry.dataKey === indoorKey && entry.value != null)
-                const outdoor = payload.find((entry) => entry.dataKey === outdoorKey && entry.value != null)
-                if (!indoor && !outdoor) return null
-                return (
-                  <div className="chart-tooltip">
-                    <div>{formatTimeInZone(Number(label))}</div>
-                    {indoor ? <div>Indoor {formatClimateTick(Number(indoor.value), 'decimal')}{unit}</div> : null}
-                    {outdoor ? <div>Outdoor {formatClimateTick(Number(outdoor.value), 'decimal')}{unit}</div> : null}
-                  </div>
-                )
-              }}
+              filterNull
+              labelFormatter={(value) => formatTimeInZone(Number(value))}
+              formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)}${unit}`, name]}
             />
             <Line
               type="linear"
               dataKey={indoorKey}
+              name="Indoor"
               stroke={colors.line}
               dot={false}
               strokeWidth={1.5}
@@ -613,6 +632,7 @@ function CompareSeries({
             <Line
               type="linear"
               dataKey={outdoorKey}
+              name="Outdoor"
               stroke={colors.avgLine}
               dot={false}
               strokeWidth={1.75}
@@ -634,6 +654,125 @@ type WeatherPoint = {
   windspeed: number | null
   sunpower: number | null
   airpressure: number | null
+}
+
+function TempHumidityChart({
+  data,
+  colors,
+}: {
+  data: WeatherPoint[]
+  colors: ReturnType<typeof useChartColors>
+}) {
+  return (
+    <section className="card chart-card">
+      <h2>Temperature + humidity</h2>
+      <p className="chart-legend">
+        <span className="swatch awake" /> Temp
+        <span className="swatch avg" /> Humidity
+      </p>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={(value) => formatTimeInZone(Number(value))}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+            />
+            <YAxis
+              yAxisId="temp"
+              stroke={colors.line}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={40}
+              tickFormatter={(value) => Number(value).toFixed(1)}
+            />
+            <YAxis
+              yAxisId="humid"
+              orientation="right"
+              stroke={colors.avgLine}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={36}
+              tickFormatter={(value) => `${Math.round(Number(value))}%`}
+            />
+            <Tooltip
+              labelFormatter={(value) => formatTimeInZone(Number(value))}
+              formatter={(value, name) => [
+                name === 'temperature' ? `${Number(value ?? 0).toFixed(1)}°C` : `${Number(value ?? 0).toFixed(1)}%`,
+                name === 'temperature' ? 'Temp' : 'Humidity',
+              ]}
+            />
+            <Line
+              yAxisId="temp"
+              type="linear"
+              dataKey="temperature"
+              stroke={colors.line}
+              dot={false}
+              strokeWidth={1.5}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+            <Line
+              yAxisId="humid"
+              type="linear"
+              dataKey="humidity"
+              stroke={colors.avgLine}
+              dot={false}
+              strokeWidth={1.5}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
+}
+
+function RainBars({
+  data,
+  colors,
+}: {
+  data: WeatherPoint[]
+  colors: ReturnType<typeof useChartColors>
+}) {
+  const values = data.map((row) => row.precipitation).filter((value): value is number => value != null)
+  const max = values.length > 0 ? Math.max(...values, 0.5) : 0.5
+
+  return (
+    <section className="card chart-card">
+      <h2>Rain</h2>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={(value) => formatTimeInZone(Number(value))}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+            />
+            <YAxis
+              domain={[0, max]}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={40}
+              tickFormatter={(value) => Number(value).toFixed(1)}
+            />
+            <Tooltip
+              labelFormatter={(value) => formatTimeInZone(Number(value))}
+              formatter={(value) => [`${Number(value ?? 0).toFixed(1)} mm`, 'Rain']}
+            />
+            <Bar dataKey="precipitation" fill={colors.avgLine} maxBarSize={18} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
 }
 
 export function BuienradarCharts({ measurements }: { measurements: BuienradarMeasurement[] }) {
@@ -666,34 +805,8 @@ export function BuienradarCharts({ measurements }: { measurements: BuienradarMea
 
   return (
     <>
-      <ClimateSeries
-        title="Temperature"
-        data={data}
-        dataKey="temperature"
-        unit="°C"
-        stroke={colors.line}
-        colors={colors}
-        scale="decimal"
-      />
-      <ClimateSeries
-        title="Humidity"
-        data={data}
-        dataKey="humidity"
-        unit="%"
-        stroke={colors.deep}
-        colors={colors}
-        scale="decimal"
-      />
-      <ClimateSeries
-        title="Precipitation"
-        data={data}
-        dataKey="precipitation"
-        unit=" mm"
-        stroke={colors.avgLine}
-        colors={colors}
-        scale="decimal"
-        yFloor={0}
-      />
+      <TempHumidityChart data={data} colors={colors} />
+      <RainBars data={data} colors={colors} />
       <ClimateSeries
         title="Wind"
         data={data}
