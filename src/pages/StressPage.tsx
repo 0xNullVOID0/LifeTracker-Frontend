@@ -4,8 +4,11 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyStress, GarminDay} from '../types/garmin.ts'
 import {StressTrendChart} from '../charts.tsx'
+import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
+import {publishGarminDays} from '../garminCache.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -13,44 +16,54 @@ import {GarminNav} from './GarminNav.tsx'
 export function StressPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
-  const [data, setData] = useState<DailyStress | null>(null)
-  const [empty, setEmpty] = useState(false)
+  const [data, setData] = useDateState(
+    requestedDate,
+    (day) => readCache<DailyStress | null>(cacheKeys.stress(day))?.value,
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
-  const [days, setDays] = useState<GarminDay[]>([])
-  const { pending, updateNow } = useLiveRefresh(
+  const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])
+  const empty = hasCache(cacheKeys.stress(requestedDate)) && data === null
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
     requestedDate,
     async ({ mode, isCurrent }) => {
-      if (mode === 'initial') {
-        setData(null)
-        setError(null)
-        setEmpty(false)
-      }
-
       const [stressOutcome, daysOutcome] = await Promise.allSettled([
-        getDailyStress(requestedDate),
-        getGarminDays(),
+        loadCache(cacheKeys.stress(requestedDate), () => getDailyStress(requestedDate), {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveSlowMs,
+        }),
+        loadCache(cacheKeys.garminDays, async () => (await getGarminDays()) ?? [], {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveSlowMs,
+        }),
       ])
       if (!isCurrent()) return
 
+      const overwrite = mode !== 'initial'
+      if (daysOutcome.status === 'fulfilled') {
+        publishGarminDays(daysOutcome.value, overwrite)
+        setDays(daysOutcome.value)
+      } else if (!hasCache(cacheKeys.garminDays)) {
+        setDays([])
+      }
+
       if (stressOutcome.status === 'fulfilled') {
         setData(stressOutcome.value)
-        setEmpty(stressOutcome.value === null)
         setError(null)
-      } else if (mode === 'poll') {
+      } else if (mode === 'poll' || hasCache(cacheKeys.stress(requestedDate))) {
+        const cached = readCache<DailyStress | null>(cacheKeys.stress(requestedDate))
+        if (cached) setData(cached.value)
         setError(stressOutcome.reason instanceof ApiError ? stressOutcome.reason.message : 'Could not load stress')
       } else {
         setData(null)
-        setEmpty(false)
         setError(stressOutcome.reason instanceof ApiError ? stressOutcome.reason.message : 'Could not load stress')
-      }
-
-      if (daysOutcome.status === 'fulfilled') {
-        setDays(daysOutcome.value ?? [])
-      } else if (mode !== 'poll') {
-        setDays([])
       }
     },
     liveSlowMs,
+    {
+      scope: refreshScopes.garmin,
+      warm: hasCache(cacheKeys.stress(requestedDate)) || hasCache(cacheKeys.garminDays),
+    },
   )
 
   return (
@@ -75,7 +88,7 @@ export function StressPage() {
           <button type="submit" disabled={pending}>
             {pending ? 'Loading…' : 'Load'}
           </button>
-          <UpdateNowButton onClick={updateNow} pending={pending} />
+          <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
         </div>
       </form>
 

@@ -31,6 +31,36 @@ export function addDays(iso: string, days: number): string {
   return toIsoDate(next)
 }
 
+export function startOfWeek(iso: string): string {
+  const date = fromIsoDate(iso)
+  const weekday = date.getDay()
+  const offset = weekday === 0 ? -6 : 1 - weekday
+  date.setDate(date.getDate() + offset)
+  return toIsoDate(date)
+}
+
+export function startOfMonth(iso: string): string {
+  const date = fromIsoDate(iso)
+  date.setDate(1)
+  return toIsoDate(date)
+}
+
+export function datesInRange(start: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => addDays(start, index))
+}
+
+export function formatSeconds(total: number): string {
+  const sign = total < 0 ? '-' : ''
+  const abs = Math.abs(Math.round(total))
+  const hours = Math.floor(abs / 3600)
+  const minutes = Math.floor((abs % 3600) / 60)
+  return `${sign}${hours}h ${String(minutes).padStart(2, '0')}m`
+}
+
+export function formatMs(ms: number): string {
+  return formatSeconds(Math.floor(ms / 1000))
+}
+
 export const appTimeZone = 'Europe/Amsterdam'
 
 export function formatTimeInZone(value: Date | number, timeZone = appTimeZone): string {
@@ -48,14 +78,6 @@ export function toIsoDateInZone(value: Date, timeZone = appTimeZone): string {
     month: '2-digit',
     day: '2-digit',
   }).format(value)
-}
-
-export function formatSeconds(total: number): string {
-  const sign = total < 0 ? '-' : ''
-  const abs = Math.abs(Math.round(total))
-  const hours = Math.floor(abs / 3600)
-  const minutes = Math.floor((abs % 3600) / 60)
-  return `${sign}${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 export function parseClimateTimestamp(iso: string): Date {

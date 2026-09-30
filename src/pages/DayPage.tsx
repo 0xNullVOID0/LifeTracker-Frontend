@@ -3,10 +3,13 @@ import {Link} from 'react-router-dom'
 import {getAwakeWindow, getGarminDay, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
+import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
 import {dateQuery} from '../dates.ts'
+import {publishGarminDay, publishGarminDays} from '../garminCache.ts'
 import type {AwakeWindow, GarminDay} from '../types/garmin.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -42,52 +45,66 @@ function loadErrorMessage(caught: unknown, fallback: string): string {
 export function DayPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
-  const [data, setData] = useState<GarminDay | null>(null)
-  const [days, setDays] = useState<GarminDay[]>([])
-  const [awake, setAwake] = useState<AwakeWindow | null>(null)
-  const [empty, setEmpty] = useState(false)
+  const [data, setData] = useDateState(
+    requestedDate,
+    (day) => readCache<GarminDay | null>(cacheKeys.garminDay(day))?.value,
+    null,
+  )
+  const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])
+  const [awake, setAwake] = useDateState(
+    requestedDate,
+    (day) => readCache<AwakeWindow | null>(cacheKeys.awake(day))?.value,
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [daysError, setDaysError] = useState<string | null>(null)
   const [awakeError, setAwakeError] = useState<string | null>(null)
-  const { pending, updateNow } = useLiveRefresh(
+  const empty = hasCache(cacheKeys.garminDay(requestedDate)) && data === null
+  const dayCached = hasCache(cacheKeys.garminDay(requestedDate))
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
     requestedDate,
     async ({ mode, isCurrent }) => {
-      if (mode === 'initial') {
-        setData(null)
-        setAwake(null)
-        setError(null)
-        setDaysError(null)
-        setAwakeError(null)
-        setEmpty(false)
-      }
-
       const [dayOutcome, daysOutcome, awakeOutcome] = await Promise.allSettled([
-        getGarminDay(requestedDate),
-        getGarminDays(),
-        mode === 'poll' ? Promise.resolve(null) : getAwakeWindow(requestedDate),
+        loadCache(cacheKeys.garminDay(requestedDate), () => getGarminDay(requestedDate), {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveSlowMs,
+        }),
+        loadCache(cacheKeys.garminDays, async () => (await getGarminDays()) ?? [], {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveSlowMs,
+        }),
+        mode === 'poll'
+          ? Promise.resolve(null)
+          : loadCache(cacheKeys.awake(requestedDate), () => getAwakeWindow(requestedDate), {
+              force: mode === 'manual',
+              maxAge: liveSlowMs,
+            }),
       ])
       if (!isCurrent()) return
 
-      if (dayOutcome.status === 'fulfilled') {
-        setData(dayOutcome.value)
-        setEmpty(dayOutcome.value === null)
-        setError(null)
-      } else if (mode === 'poll') {
-        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
-      } else {
-        setData(null)
-        setEmpty(false)
-        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
-      }
-
+      const overwrite = mode !== 'initial'
       if (daysOutcome.status === 'fulfilled') {
-        setDays(daysOutcome.value ?? [])
+        publishGarminDays(daysOutcome.value, overwrite)
+        setDays(daysOutcome.value)
         setDaysError(null)
-      } else if (mode === 'poll') {
+      } else if (mode === 'poll' || hasCache(cacheKeys.garminDays)) {
         setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
       } else {
         setDays([])
         setDaysError(loadErrorMessage(daysOutcome.reason, 'Could not load Garmin days'))
+      }
+
+      if (dayOutcome.status === 'fulfilled') {
+        if (dayOutcome.value) publishGarminDay(dayOutcome.value, overwrite)
+        setData(dayOutcome.value)
+        setError(null)
+      } else if (mode === 'poll' || hasCache(cacheKeys.garminDay(requestedDate))) {
+        const cached = readCache<GarminDay | null>(cacheKeys.garminDay(requestedDate))
+        if (cached) setData(cached.value)
+        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
+      } else {
+        setData(null)
+        setError(loadErrorMessage(dayOutcome.reason, 'Could not load Garmin day'))
       }
 
       if (mode === 'poll') return
@@ -95,12 +112,18 @@ export function DayPage() {
       if (awakeOutcome.status === 'fulfilled') {
         setAwake(awakeOutcome.value)
         setAwakeError(null)
+      } else if (hasCache(cacheKeys.awake(requestedDate))) {
+        setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
       } else {
         setAwake(null)
         setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
       }
     },
     liveSlowMs,
+    {
+      scope: refreshScopes.garmin,
+      warm: dayCached || hasCache(cacheKeys.garminDays) || hasCache(cacheKeys.awake(requestedDate)),
+    },
   )
 
   return (
@@ -125,7 +148,7 @@ export function DayPage() {
           <button type="submit" disabled={pending}>
             {pending ? 'Loading…' : 'Load'}
           </button>
-          <UpdateNowButton onClick={updateNow} pending={pending} />
+          <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
         </div>
       </form>
 

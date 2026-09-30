@@ -1,12 +1,13 @@
-import {useMemo, useState} from 'react'
-import {getBuienradar, syncBuienradar} from '../api/buienradar.ts'
+import {useState} from 'react'
+import {fetchBuienradarSeries, syncBuienradar} from '../api/buienradar.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {BuienradarCharts} from '../charts.tsx'
+import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
-import {toIsoDateInZone} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {buienradarDay} from '../seriesCache.ts'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -14,31 +15,34 @@ import {GarminNav} from './GarminNav.tsx'
 export function BuienradarPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
-  const [rows, setRows] = useState<BuienradarMeasurement[] | null>(null)
+  const [rows, setRows] = useState<BuienradarMeasurement[] | null>(
+    () => readCache<BuienradarMeasurement[]>(cacheKeys.buienradar)?.value ?? null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
-  const { pending, updateNow } = useLiveRefresh(
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
     'buienradar',
     async ({ mode, isCurrent }) => {
       try {
-        const result = await getBuienradar()
+        const result = await loadCache(cacheKeys.buienradar, fetchBuienradarSeries, {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveMinuteMs,
+        })
         if (!isCurrent()) return
-        setRows(result ?? [])
+        setRows(result)
         setError(null)
       } catch (caught) {
         if (!isCurrent()) return
-        if (mode === 'initial') setRows(null)
+        if (mode === 'initial' && !hasCache(cacheKeys.buienradar)) setRows(null)
         setError(caught instanceof ApiError ? caught.message : 'Could not load Buienradar')
       }
     },
     liveMinuteMs,
+    { scope: refreshScopes.sensors, warm: hasCache(cacheKeys.buienradar) },
   )
 
-  const dayRows = useMemo(() => {
-    if (!rows) return []
-    return rows.filter((row) => toIsoDateInZone(new Date(row.timestamp)) === requestedDate)
-  }, [rows, requestedDate])
+  const dayRows = rows ? buienradarDay(rows, requestedDate) : emptyBuienradar
 
   const latest = dayRows.length > 0 ? newest(dayRows) : null
 
@@ -47,7 +51,9 @@ export function BuienradarPage() {
     setError(null)
     try {
       await syncBuienradar()
-      updateNow()
+      const result = await loadCache(cacheKeys.buienradar, fetchBuienradarSeries, { force: true })
+      setRows(result)
+      setError(null)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Buienradar sync failed')
     } finally {
@@ -79,7 +85,7 @@ export function BuienradarPage() {
           <button type="submit" disabled={pending || syncing}>
             {pending ? 'Loading…' : 'Load'}
           </button>
-          <UpdateNowButton onClick={updateNow} pending={pending || syncing} />
+          <UpdateNowButton onClick={updateNow} pending={pending || syncing} cooldownMs={cooldownMs} />
           <button type="button" className="ghost" onClick={() => void onSync()} disabled={pending || syncing}>
             {syncing ? 'Syncing…' : 'Sync now'}
           </button>
@@ -139,6 +145,8 @@ export function BuienradarPage() {
     </main>
   )
 }
+
+const emptyBuienradar: BuienradarMeasurement[] = []
 
 function newest(rows: BuienradarMeasurement[]): BuienradarMeasurement {
   return rows.reduce((best, row) => (row.timestamp > best.timestamp ? row : best))

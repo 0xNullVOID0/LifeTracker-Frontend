@@ -1,13 +1,17 @@
-import {useMemo, useState} from 'react'
+import {useState} from 'react'
 import {getAwakeWindow, getDailySleep, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {AwakeWindow, DailySleep, GarminDay} from '../types/garmin.ts'
-import {SleepStagesChart} from '../charts.tsx'
+import {SleepStagesChart, SleepWeekChart} from '../charts.tsx'
+import {cacheKeys, cachedSlice, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
 import {formatSeconds} from '../dates.ts'
+import {publishGarminDays} from '../garminCache.ts'
+import {sleepByDate, weekDates} from '../sleepMath.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
-import {useLiveRefresh} from '../useLiveRefresh.ts'
+import {useDateState} from '../useDateState.ts'
+import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
 
@@ -35,57 +39,82 @@ function loadErrorMessage(caught: unknown, fallback: string): string {
 export function SleepPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
-  const [data, setData] = useState<DailySleep | null>(null)
-  const [awake, setAwake] = useState<AwakeWindow | null>(null)
-  const [empty, setEmpty] = useState(false)
+  const [data, setData] = useDateState(
+    requestedDate,
+    (day) => readCache<DailySleep | null>(cacheKeys.sleep(day))?.value,
+    null,
+  )
+  const [awake, setAwake] = useDateState(
+    requestedDate,
+    (day) => readCache<AwakeWindow | null>(cacheKeys.awake(day))?.value,
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [awakeError, setAwakeError] = useState<string | null>(null)
-  const [days, setDays] = useState<GarminDay[]>([])
+  const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])
+  const empty = hasCache(cacheKeys.sleep(requestedDate)) && data === null
 
-  const { pending, updateNow } = useLiveRefresh(
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
     requestedDate,
     async ({ mode, isCurrent }) => {
-      if (mode === 'initial') {
-        setData(null)
-        setAwake(null)
-      }
-      setError(null)
-      setAwakeError(null)
-      setEmpty(false)
-
       const [sleepOutcome, awakeOutcome, daysOutcome] = await Promise.allSettled([
-        getDailySleep(requestedDate),
-        getAwakeWindow(requestedDate),
-        getGarminDays(),
+        loadCache(cacheKeys.sleep(requestedDate), () => getDailySleep(requestedDate), {
+          force: mode === 'manual',
+          maxAge: liveSlowMs,
+        }),
+        loadCache(cacheKeys.awake(requestedDate), () => getAwakeWindow(requestedDate), {
+          force: mode === 'manual',
+          maxAge: liveSlowMs,
+        }),
+        loadCache(cacheKeys.garminDays, async () => (await getGarminDays()) ?? [], {
+          force: mode === 'manual',
+          maxAge: liveSlowMs,
+        }),
       ])
       if (!isCurrent()) return
 
+      const overwrite = mode !== 'initial'
+      if (daysOutcome.status === 'fulfilled') {
+        publishGarminDays(daysOutcome.value, overwrite)
+        setDays(daysOutcome.value)
+      } else if (!hasCache(cacheKeys.garminDays)) {
+        setDays([])
+      }
+
       if (sleepOutcome.status === 'fulfilled') {
         setData(sleepOutcome.value)
-        setEmpty(sleepOutcome.value === null)
+        setError(null)
+      } else if (hasCache(cacheKeys.sleep(requestedDate))) {
+        const cached = readCache<DailySleep | null>(cacheKeys.sleep(requestedDate))
+        if (cached) setData(cached.value)
+        setError(loadErrorMessage(sleepOutcome.reason, 'Could not load sleep'))
       } else {
         setData(null)
-        setEmpty(false)
         setError(loadErrorMessage(sleepOutcome.reason, 'Could not load sleep'))
       }
 
       if (awakeOutcome.status === 'fulfilled') {
         setAwake(awakeOutcome.value)
         setAwakeError(null)
+      } else if (hasCache(cacheKeys.awake(requestedDate))) {
+        setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
       } else {
         setAwake(null)
         setAwakeError(loadErrorMessage(awakeOutcome.reason, 'Could not load awake window'))
       }
 
-      if (daysOutcome.status === 'fulfilled') setDays(daysOutcome.value ?? [])
     },
     null,
+    {
+      scope: refreshScopes.garmin,
+      warm: hasCache(cacheKeys.sleep(requestedDate)) || hasCache(cacheKeys.awake(requestedDate)) || hasCache(cacheKeys.garminDays),
+    },
   )
 
-  const weekNights = useMemo(() => {
+  const weekNights = cachedSlice(days, `sleep-nights:${requestedDate}`, () => {
     const map = sleepByDate(days)
-    return weekDates(requestedDate).map((date) => ({ date, sleep: map.get(date) ?? null }))
-  }, [days, requestedDate])
+    return weekDates(requestedDate).map((iso) => ({ date: iso, sleep: map.get(iso) ?? null }))
+  })
 
   return (
     <main className="page wide">
@@ -109,7 +138,7 @@ export function SleepPage() {
           <button type="submit" disabled={pending}>
             {pending ? 'Loading…' : 'Load'}
           </button>
-          <UpdateNowButton onClick={updateNow} pending={pending} />
+          <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
         </div>
       </form>
 

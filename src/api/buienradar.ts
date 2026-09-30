@@ -10,6 +10,10 @@ export function getBuienradar(): Promise<BuienradarMeasurement[] | null> {
   return azureFetch<BuienradarMeasurement[]>('/api/buienradar')
 }
 
+export async function fetchBuienradarSeries(): Promise<BuienradarMeasurement[]> {
+  return (await getBuienradar()) ?? []
+}
+
 export function syncBuienradar(): Promise<BuienradarMeasurement | null> {
   return apiFetch<BuienradarMeasurement>('/api/buienradar', { method: 'POST' })
 }

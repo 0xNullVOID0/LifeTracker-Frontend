@@ -4,9 +4,11 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyHeartRate, DailySleep} from '../types/garmin.ts'
 import {HeartRateChart, type SleepWindow} from '../charts.tsx'
+import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {addDays} from '../dates.ts'
 import {DatePicker} from '../DatePicker.tsx'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './GarminNav.tsx'
@@ -15,6 +17,19 @@ function formatTimestamp(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleString()
+}
+
+function readSleepWindows(date: string): SleepWindow[] | undefined {
+  const today = readCache<DailySleep | null>(cacheKeys.sleep(date))
+  const tomorrow = readCache<DailySleep | null>(cacheKeys.sleep(addDays(date, 1)))
+  if (!today && !tomorrow) return undefined
+  const windows: SleepWindow[] = []
+  for (const box of [today, tomorrow]) {
+    if (!box?.value) continue
+    const window = sleepWindowFromSleep(box.value)
+    if (window) windows.push(window)
+  }
+  return windows
 }
 
 function sleepWindowFromSleep(sleep: DailySleep): SleepWindow | null {
@@ -27,38 +42,46 @@ function sleepWindowFromSleep(sleep: DailySleep): SleepWindow | null {
 export function HeartRatePage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
-  const [data, setData] = useState<DailyHeartRate | null>(null)
-  const [sleepWindows, setSleepWindows] = useState<SleepWindow[]>([])
-  const [empty, setEmpty] = useState(false)
+  const [data, setData] = useDateState(
+    requestedDate,
+    (day) => readCache<DailyHeartRate | null>(cacheKeys.heart(day))?.value,
+    null,
+  )
+  const [sleepWindows, setSleepWindows] = useDateState(requestedDate, readSleepWindows, [] as SleepWindow[])
   const [error, setError] = useState<string | null>(null)
-  const { pending, updateNow } = useLiveRefresh(
+  const empty = hasCache(cacheKeys.heart(requestedDate)) && data === null
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
     requestedDate,
     async ({ mode, isCurrent }) => {
-      if (mode === 'initial') {
-        setData(null)
-        setSleepWindows([])
-        setError(null)
-        setEmpty(false)
-      }
-
       const nextDate = addDays(requestedDate, 1)
       const [heartOutcome, sleepToday, sleepTomorrow] = await Promise.allSettled([
-        getDailyHeartRate(requestedDate),
-        mode === 'poll' ? Promise.resolve(null) : getDailySleep(requestedDate),
-        mode === 'poll' ? Promise.resolve(null) : getDailySleep(nextDate),
+        loadCache(cacheKeys.heart(requestedDate), () => getDailyHeartRate(requestedDate), {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveSlowMs,
+        }),
+        mode === 'poll'
+          ? Promise.resolve(null)
+          : loadCache(cacheKeys.sleep(requestedDate), () => getDailySleep(requestedDate), {
+              force: mode === 'manual',
+              maxAge: liveSlowMs,
+            }),
+        mode === 'poll'
+          ? Promise.resolve(null)
+          : loadCache(cacheKeys.sleep(nextDate), () => getDailySleep(nextDate), {
+              force: mode === 'manual',
+              maxAge: liveSlowMs,
+            }),
       ])
       if (!isCurrent()) return
 
       if (heartOutcome.status === 'fulfilled') {
         setData(heartOutcome.value)
-        setEmpty(heartOutcome.value === null)
         setError(null)
-      } else if (mode === 'poll') {
+      } else if (mode === 'poll' || hasCache(cacheKeys.heart(requestedDate))) {
         const caught = heartOutcome.reason
         setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
       } else {
         setData(null)
-        setEmpty(false)
         const caught = heartOutcome.reason
         setError(caught instanceof ApiError ? caught.message : 'Could not load heart rate')
       }
@@ -74,6 +97,7 @@ export function HeartRatePage() {
       setSleepWindows(windows)
     },
     liveSlowMs,
+    { scope: refreshScopes.garmin, warm: hasCache(cacheKeys.heart(requestedDate)) },
   )
 
   return (
@@ -98,7 +122,7 @@ export function HeartRatePage() {
           <button type="submit" disabled={pending}>
             {pending ? 'Loading…' : 'Load'}
           </button>
-          <UpdateNowButton onClick={updateNow} pending={pending} />
+          <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
         </div>
       </form>
 

@@ -1,9 +1,10 @@
 import {type FormEvent, useState} from 'react'
-import {getRoomClimateByDay} from '../api/climate.ts'
+import {fetchRoomClimateDay} from '../api/climate.ts'
 import {azureLogin, getAzureToken} from '../api/azure.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {RoomClimateCharts} from '../charts.tsx'
+import {cacheKeys, dropCache, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
 import {todayLocal} from '../dates.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
@@ -17,36 +18,44 @@ export function ClimatePage() {
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [azureToken, setAzureToken] = useState(getAzureToken)
   const [azurePassword, setAzurePassword] = useState('')
-  const [rows, setRows] = useState<RoomClimateMeasurement[] | null>(null)
+  const [rows, setRows] = useState<RoomClimateMeasurement[] | null>(() => {
+    const cached = readCache<RoomClimateMeasurement[]>(cacheKeys.roomClimate(requestedDate))
+    return cached?.value ?? null
+  })
   const [error, setError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
+  const warm = Boolean(azureToken) && hasCache(cacheKeys.roomClimate(requestedDate))
 
-  const refreshKey = `${azureToken ?? 'none'}:${requestedDate}`
-  const { pending, updateNow } = useLiveRefresh(
-    refreshKey,
+  const { pending, cooldownMs, updateNow } = useLiveRefresh(
+    `${azureToken ?? ''}:${requestedDate}`,
     async ({ mode, isCurrent }) => {
       if (!azureToken) return
       try {
-        const result = await getRoomClimateByDay(requestedDate)
+        const result = await loadCache(cacheKeys.roomClimate(requestedDate), () => fetchRoomClimateDay(requestedDate), {
+          force: mode === 'manual',
+          maxAge: mode === 'poll' ? 0 : liveMinuteMs,
+        })
         if (!isCurrent()) return
-        setRows(result ?? [])
+        setRows(result)
         setError(null)
       } catch (caught) {
         if (!isCurrent()) return
         if (caught instanceof ApiError && caught.status === 401) {
+          dropCache(cacheKeys.roomClimate(requestedDate))
           setRows(null)
           setAzureToken(null)
           setError('Azure session expired. Sign in again.')
           return
         }
-        if (mode === 'initial') setRows(null)
+        if (mode === 'initial' && !hasCache(cacheKeys.roomClimate(requestedDate))) setRows(null)
         setError(caught instanceof ApiError ? caught.message : 'Could not load room climate from Azure')
       }
     },
-    azureToken && requestedDate === todayLocal() ? liveMinuteMs : null,
+    azureToken ? liveMinuteMs : null,
+    { scope: refreshScopes.sensors, warm },
   )
 
-  const dayRows = rows ?? []
+  const dayRows = rows ?? emptyClimate
 
   async function onAzureLogin(event: FormEvent) {
     event.preventDefault()
@@ -111,7 +120,7 @@ export function ClimatePage() {
               <button type="submit" disabled={pending}>
                 {pending ? 'Loading…' : 'Load'}
               </button>
-              <UpdateNowButton onClick={updateNow} pending={pending} />
+              <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
             </div>
           </form>
 
@@ -123,7 +132,7 @@ export function ClimatePage() {
 
           {dayRows.length > 0 ? (
             <>
-              {Math.round(newest(dayRows).cO2) >= 800 ? (
+              {requestedDate === todayLocal() && Math.round(newest(dayRows).cO2) >= 800 ? (
                 <p className={Math.round(newest(dayRows).cO2) >= 1200 ? 'warning warning-strong' : 'warning'}>
                   CO₂ is {Math.round(newest(dayRows).cO2)} ppm. Open a window.
                 </p>
@@ -154,6 +163,8 @@ export function ClimatePage() {
     </main>
   )
 }
+
+const emptyClimate: RoomClimateMeasurement[] = []
 
 function newest(rows: RoomClimateMeasurement[]): RoomClimateMeasurement {
   return rows.reduce((best, row) => (row.timestamp > best.timestamp ? row : best))

@@ -11,12 +11,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import {memoOne, memoTwo} from './dataCache.ts'
 import {formatTimeInZone, parseClimateTimestamp} from './dates.ts'
 import type {BuienradarMeasurement} from './types/buienradar.ts'
 import type {RoomClimateMeasurement} from './types/climate.ts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
-
-// TODO split up all these charts into seperate files
 
 function useChartColors() {
   const [dark, setDark] = useState(() =>
@@ -118,23 +117,25 @@ export function HeartRateChart({
   sleepWindows?: SleepWindow[]
 }) {
   const colors = useChartColors()
-  const sorted = samples
-    .map((sample) => ({
-      t: new Date(sample.timestamp).getTime(),
-      sleeping: sample.sleeping,
-      bpm: sample.bpm,
-    }))
-    .filter((sample) => Number.isFinite(sample.t) && Number.isFinite(sample.bpm))
-    .sort((a, b) => a.t - b.t)
-  const averages = rollingAverage(sorted)
-  const data = breakLineGaps(
-    sorted.map((sample, index) => ({
-      ...sample,
-      bpm: sample.bpm as number | null,
-      avg: (Math.round(averages[index] * 10) / 10) as number | null,
-    })),
-    (t) => ({ t, sleeping: false, bpm: null, avg: null }),
-  )
+  const data = memoOne(samples, () => {
+    const sorted = samples
+      .map((sample) => ({
+        t: new Date(sample.timestamp).getTime(),
+        sleeping: sample.sleeping,
+        bpm: sample.bpm,
+      }))
+      .filter((sample) => Number.isFinite(sample.t) && Number.isFinite(sample.bpm))
+      .sort((a, b) => a.t - b.t)
+    const averages = rollingAverage(sorted)
+    return breakLineGaps(
+      sorted.map((sample, index) => ({
+        ...sample,
+        bpm: sample.bpm as number | null,
+        avg: (Math.round(averages[index] * 10) / 10) as number | null,
+      })),
+      (t) => ({ t, sleeping: false, bpm: null, avg: null }),
+    )
+  })
   if (data.length === 0) return null
   const bpms = data.map((sample) => sample.bpm).filter((bpm): bpm is number => bpm != null)
   const yMin = Math.max(0, Math.min(...bpms) - 4)
@@ -206,7 +207,7 @@ export function HeartRateChart({
 
 export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
   const colors = useChartColors()
-  const data = [
+  const data = memoOne(sleep, () => [
     {
       name: 'Stages',
       deep: sleep.deepSleepSeconds / 3600,
@@ -214,7 +215,7 @@ export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
       rem: sleep.remSleepSeconds / 3600,
       awake: sleep.awakeSleepSeconds / 3600,
     },
-  ]
+  ])
 
   return (
     <section className="card chart-card">
@@ -240,11 +241,13 @@ export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
 
 export function StressTrendChart({ days }: { days: GarminDay[] }) {
   const colors = useChartColors()
-  const data = days
+  const data = memoOne(days, () =>
+    days
       .flatMap((day) =>
         day.stress ? [{ date: day.date, average: day.stress.average, max: day.stress.max }] : [],
       )
-    .sort((a, b) => a.date.localeCompare(b.date))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  )
 
   if (data.length === 0) return null
 
@@ -316,7 +319,8 @@ function maskEsp32Calibration(points: ClimatePoint[]): ClimatePoint[] {
 
 export function RoomClimateCharts({ measurements }: { measurements: RoomClimateMeasurement[] }) {
   const colors = useChartColors()
-  const data: ClimatePoint[] = breakLineGaps(
+  const data = memoOne(measurements, (): ClimatePoint[] =>
+    breakLineGaps(
       maskEsp32Calibration(
         measurements
           .map((row) => ({
@@ -329,6 +333,7 @@ export function RoomClimateCharts({ measurements }: { measurements: RoomClimateM
           .sort((a, b) => a.t - b.t),
       ),
       (t) => ({ t, temperature: null, humidity: null, co2: null }),
+    ),
   )
 
   if (data.length === 0) return null
@@ -408,7 +413,6 @@ function ClimateSeries({
   stroke: string
   colors: ReturnType<typeof useChartColors>
   scale: 'co2' | 'decimal'
-  yFloor?: number
 }) {
   const values = data.map((row) => row[dataKey]).filter((value): value is number => value != null)
   if (values.length === 0) return null
@@ -469,42 +473,6 @@ type ComparePoint = {
   outdoorHumid: number | null
 }
 
-function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarMeasurement[]): ComparePoint[] {
-  const indoorPoints = maskEsp32Calibration(
-    indoor
-      .map((row) => ({
-        t: parseClimateTimestamp(row.timestamp).getTime(),
-        temperature: row.temperature,
-        humidity: row.humidity,
-        co2: row.cO2,
-      }))
-      .filter((row) => Number.isFinite(row.t))
-      .sort((a, b) => a.t - b.t),
-  )
-  const outdoorPoints = outdoor
-    .map((row) => ({
-      t: new Date(row.timestamp).getTime(),
-      temperature: row.temperature,
-      humidity: row.humidity,
-    }))
-    .filter((row) => Number.isFinite(row.t))
-    .sort((a, b) => a.t - b.t)
-
-  const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
-  const indoorTemp = seriesSamples(indoorPoints, 'temperature')
-  const indoorHumid = seriesSamples(indoorPoints, 'humidity')
-  const outdoorTemp = seriesSamples(outdoorPoints, 'temperature')
-  const outdoorHumid = seriesSamples(outdoorPoints, 'humidity')
-
-  return times.map((t) => ({
-    t,
-    indoorTemp: valueOnSeries(indoorTemp, t),
-    indoorHumid: valueOnSeries(indoorHumid, t),
-    outdoorTemp: valueOnSeries(outdoorTemp, t),
-    outdoorHumid: valueOnSeries(outdoorHumid, t),
-  }))
-}
-
 export function IndoorOutdoorCharts({
   indoor,
   outdoor,
@@ -513,7 +481,44 @@ export function IndoorOutdoorCharts({
   outdoor: BuienradarMeasurement[]
 }) {
   const colors = useChartColors()
-  const data = buildCompareData(indoor, outdoor)
+  const data = memoTwo(indoor, outdoor, (): ComparePoint[] => {
+    const indoorPoints = maskEsp32Calibration(
+      indoor
+        .map((row) => ({
+          t: parseClimateTimestamp(row.timestamp).getTime(),
+          temperature: row.temperature,
+          humidity: row.humidity,
+          co2: row.cO2,
+        }))
+        .filter((row) => Number.isFinite(row.t))
+        .sort((a, b) => a.t - b.t),
+    )
+    const outdoorPoints = outdoor
+      .map((row) => ({
+        t: new Date(row.timestamp).getTime(),
+        temperature: row.temperature,
+        humidity: row.humidity,
+      }))
+      .filter((row) => Number.isFinite(row.t))
+      .sort((a, b) => a.t - b.t)
+
+    return [
+      ...indoorPoints.map((row) => ({
+        t: row.t,
+        indoorTemp: row.temperature,
+        indoorHumid: row.humidity,
+        outdoorTemp: null,
+        outdoorHumid: null,
+      })),
+      ...outdoorPoints.map((row) => ({
+        t: row.t,
+        indoorTemp: null,
+        indoorHumid: null,
+        outdoorTemp: row.temperature,
+        outdoorHumid: row.humidity,
+      })),
+    ].sort((a, b) => a.t - b.t)
+  })
 
   if (data.length === 0) return null
 
@@ -537,33 +542,6 @@ export function IndoorOutdoorCharts({
       />
     </>
   )
-}
-
-function seriesSamples(
-  points: { t: number; temperature: number | null; humidity: number | null }[],
-  key: 'temperature' | 'humidity') : { t: number; v: number }[] {
-  return points.flatMap((point) => {
-    const value = point[key]
-    return value == null ? [] : [{ t: point.t, v: value }]
-  })
-}
-
-function valueOnSeries(samples: { t: number; v: number }[], t: number): number | null {
-  if (samples.length === 0 || t < samples[0].t || t > samples[samples.length - 1].t) return null
-  let lo = 0
-  let hi = samples.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (samples[mid].t < t) lo = mid + 1
-    else hi = mid
-  }
-  const right = samples[lo]
-  if (right.t === t || lo === 0) return right.v
-  const left = samples[lo - 1]
-  const span = right.t - left.t
-  if (span <= 0) return left.v
-  const fraction = (t - left.t) / span
-  return left.v + (right.v - left.v) * fraction
 }
 
 function CompareSeries({
@@ -617,14 +595,23 @@ function CompareSeries({
               width={44}
             />
             <Tooltip
-              filterNull
-              labelFormatter={(value) => formatTimeInZone(Number(value))}
-              formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)}${unit}`, name]}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                const indoor = payload.find((entry) => entry.dataKey === indoorKey && entry.value != null)
+                const outdoor = payload.find((entry) => entry.dataKey === outdoorKey && entry.value != null)
+                if (!indoor && !outdoor) return null
+                return (
+                  <div className="chart-tooltip">
+                    <div>{formatTimeInZone(Number(label))}</div>
+                    {indoor ? <div>Indoor {formatClimateTick(Number(indoor.value), 'decimal')}{unit}</div> : null}
+                    {outdoor ? <div>Outdoor {formatClimateTick(Number(outdoor.value), 'decimal')}{unit}</div> : null}
+                  </div>
+                )
+              }}
             />
             <Line
               type="linear"
               dataKey={indoorKey}
-              name="Indoor"
               stroke={colors.line}
               dot={false}
               strokeWidth={1.5}
@@ -634,7 +621,6 @@ function CompareSeries({
             <Line
               type="linear"
               dataKey={outdoorKey}
-              name="Outdoor"
               stroke={colors.avgLine}
               dot={false}
               strokeWidth={1.75}
@@ -779,7 +765,8 @@ function RainBars({
 
 export function BuienradarCharts({ measurements }: { measurements: BuienradarMeasurement[] }) {
   const colors = useChartColors()
-  const data: WeatherPoint[] = breakLineGaps(
+  const data = memoOne(measurements, (): WeatherPoint[] =>
+    breakLineGaps(
       measurements
         .map((row): WeatherPoint => ({
           t: new Date(row.timestamp).getTime(),
@@ -801,6 +788,7 @@ export function BuienradarCharts({ measurements }: { measurements: BuienradarMea
         sunpower: null,
         airpressure: null,
       }),
+    ),
   )
 
   if (data.length === 0) return null

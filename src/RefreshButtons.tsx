@@ -1,3 +1,4 @@
+import {formatCooldown} from './dataCache.ts'
 import {todayLocal} from './dates.ts'
 
 export function TodayButton({
@@ -17,10 +18,19 @@ export function TodayButton({
   )
 }
 
-export function UpdateNowButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
+export function UpdateNowButton({
+  onClick,
+  pending,
+  cooldownMs = 0,
+}: {
+  onClick: () => void
+  pending: boolean
+  cooldownMs?: number
+}) {
+  const waiting = !pending && cooldownMs > 0
   return (
-    <button type="button" className="ghost" onClick={onClick} disabled={pending}>
-      {pending ? 'Updating…' : 'Update now'}
+    <button type="button" className="ghost" onClick={onClick} disabled={pending || waiting}>
+      {pending ? 'Updating…' : waiting ? `Update now · ${formatCooldown(cooldownMs)}` : 'Update now'}
     </button>
   )
 }
