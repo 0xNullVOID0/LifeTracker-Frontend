@@ -205,6 +205,67 @@ export function HeartRateChart({
   )
 }
 
+export function SleepWeekChart({
+  nights,
+  selected,
+  onSelect,
+  title = 'Sleep week',
+}: {
+  nights: { date: string; sleep: DailySleep | null }[]
+  selected?: string
+  onSelect: (date: string) => void
+  title?: string
+}) {
+  const colors = useChartColors()
+  const data = memoOne(nights, () =>
+    nights.map((night) => ({
+      date: night.date,
+      deep: (night.sleep?.deepSleepSeconds ?? 0) / 3600,
+      light: (night.sleep?.lightSleepSeconds ?? 0) / 3600,
+      rem: (night.sleep?.remSleepSeconds ?? 0) / 3600,
+      awake: (night.sleep?.awakeSleepSeconds ?? 0) / 3600,
+      total: (night.sleep?.sleepTimeSeconds ?? 0) / 3600,
+    })),
+  )
+
+  return (
+    <section className="card chart-card">
+      <h2>{title}</h2>
+      <p className="chart-legend">
+        <span className="swatch" style={{ background: colors.deep }} /> Deep
+        <span className="swatch" style={{ background: colors.light }} /> Light
+        <span className="swatch" style={{ background: colors.rem }} /> REM
+        <span className="swatch" style={{ background: colors.awake }} /> Awake
+      </p>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={data}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            onClick={(state) => {
+              const payload = state as { activeLabel?: string } | undefined
+              if (payload?.activeLabel) onSelect(payload.activeLabel)
+            }}
+          >
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis dataKey="date" tickFormatter={formatTickDate} stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} />
+            <YAxis unit="h" stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} width={36} />
+            <Tooltip
+              formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)}h`, String(name)]}
+              labelFormatter={(label) => String(label)}
+            />
+            <Bar dataKey="deep" stackId="s" fill={colors.deep} name="Deep" cursor="pointer" />
+            <Bar dataKey="light" stackId="s" fill={colors.light} name="Light" cursor="pointer" />
+            <Bar dataKey="rem" stackId="s" fill={colors.rem} name="REM" cursor="pointer" />
+            <Bar dataKey="awake" stackId="s" fill={colors.awake} name="Awake" cursor="pointer" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {selected ? <p className="chart-legend">Selected {selected}</p> : null}
+    </section>
+  )
+}
+
 export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
   const colors = useChartColors()
   const data = memoOne(sleep, () => [
@@ -374,10 +435,10 @@ function niceStep(span: number, scale: 'co2' | 'decimal'): number {
   return 2
 }
 
-function snapDomain(min: number, max: number, step: number): [number, number] {
-  const lo = Math.floor(min / step) * step
+function snapDomain(min: number, max: number, step: number, floor = 0): [number, number] {
+  const lo = Math.max(floor, Math.floor(min / step) * step)
   const hi = Math.ceil(max / step) * step
-  if (lo === hi) return [lo - step, hi + step]
+  if (lo === hi) return [Math.max(floor, lo - step), hi + step]
   return [lo, hi]
 }
 
@@ -418,7 +479,7 @@ function ClimateSeries({
   if (values.length === 0) return null
   const span = Math.max(...values) - Math.min(...values)
   const step = niceStep(span, scale)
-  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step)
+  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step, scale === 'co2' ? 0 : -Infinity)
   const ticks = axisTicks(yMin, yMax, step)
 
   return (
@@ -473,15 +534,7 @@ type ComparePoint = {
   outdoorHumid: number | null
 }
 
-export function IndoorOutdoorCharts({
-  indoor,
-  outdoor,
-}: {
-  indoor: RoomClimateMeasurement[]
-  outdoor: BuienradarMeasurement[]
-}) {
-  const colors = useChartColors()
-  const data = memoTwo(indoor, outdoor, (): ComparePoint[] => {
+function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarMeasurement[]): ComparePoint[] {
     const indoorPoints = maskEsp32Calibration(
       indoor
         .map((row) => ({
@@ -502,23 +555,58 @@ export function IndoorOutdoorCharts({
       .filter((row) => Number.isFinite(row.t))
       .sort((a, b) => a.t - b.t)
 
-    return [
-      ...indoorPoints.map((row) => ({
-        t: row.t,
-        indoorTemp: row.temperature,
-        indoorHumid: row.humidity,
-        outdoorTemp: null,
-        outdoorHumid: null,
-      })),
-      ...outdoorPoints.map((row) => ({
-        t: row.t,
-        indoorTemp: null,
-        indoorHumid: null,
-        outdoorTemp: row.temperature,
-        outdoorHumid: row.humidity,
-      })),
-    ].sort((a, b) => a.t - b.t)
+  const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
+  const indoorTemp = seriesSamples(indoorPoints, 'temperature')
+  const indoorHumid = seriesSamples(indoorPoints, 'humidity')
+  const outdoorTemp = seriesSamples(outdoorPoints, 'temperature')
+  const outdoorHumid = seriesSamples(outdoorPoints, 'humidity')
+
+  return times.map((t) => ({
+    t,
+    indoorTemp: valueOnSeries(indoorTemp, t),
+    indoorHumid: valueOnSeries(indoorHumid, t),
+    outdoorTemp: valueOnSeries(outdoorTemp, t),
+    outdoorHumid: valueOnSeries(outdoorHumid, t),
+  }))
+}
+
+function seriesSamples(
+  points: { t: number; temperature: number | null; humidity: number | null }[],
+  key: 'temperature' | 'humidity',
+): { t: number; v: number }[] {
+  return points.flatMap((point) => {
+    const value = point[key]
+    return value == null ? [] : [{ t: point.t, v: value }]
   })
+}
+
+function valueOnSeries(samples: { t: number; v: number }[], t: number): number | null {
+  if (samples.length === 0 || t < samples[0].t || t > samples[samples.length - 1].t) return null
+  let lo = 0
+  let hi = samples.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (samples[mid].t < t) lo = mid + 1
+    else hi = mid
+  }
+  const right = samples[lo]
+  if (right.t === t || lo === 0) return right.v
+  const left = samples[lo - 1]
+  const span = right.t - left.t
+  if (span <= 0) return left.v
+  const fraction = (t - left.t) / span
+  return left.v + (right.v - left.v) * fraction
+}
+
+export function IndoorOutdoorCharts({
+  indoor,
+  outdoor,
+}: {
+  indoor: RoomClimateMeasurement[]
+  outdoor: BuienradarMeasurement[]
+}) {
+  const colors = useChartColors()
+  const data = memoTwo(indoor, outdoor, (): ComparePoint[] => buildCompareData(indoor, outdoor))
 
   if (data.length === 0) return null
 
@@ -563,7 +651,7 @@ function CompareSeries({
   if (values.length === 0) return null
   const span = Math.max(...values) - Math.min(...values)
   const step = niceStep(span, 'decimal')
-  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step)
+  const [yMin, yMax] = snapDomain(Math.min(...values), Math.max(...values), step, -Infinity)
   const ticks = axisTicks(yMin, yMax, step)
 
   return (
@@ -595,23 +683,14 @@ function CompareSeries({
               width={44}
             />
             <Tooltip
-              content={({ active, payload, label }) => {
-                if (!active || !payload?.length) return null
-                const indoor = payload.find((entry) => entry.dataKey === indoorKey && entry.value != null)
-                const outdoor = payload.find((entry) => entry.dataKey === outdoorKey && entry.value != null)
-                if (!indoor && !outdoor) return null
-                return (
-                  <div className="chart-tooltip">
-                    <div>{formatTimeInZone(Number(label))}</div>
-                    {indoor ? <div>Indoor {formatClimateTick(Number(indoor.value), 'decimal')}{unit}</div> : null}
-                    {outdoor ? <div>Outdoor {formatClimateTick(Number(outdoor.value), 'decimal')}{unit}</div> : null}
-                  </div>
-                )
-              }}
+              filterNull
+              labelFormatter={(value) => formatTimeInZone(Number(value))}
+              formatter={(value, name) => [`${formatClimateTick(Number(value ?? 0), 'decimal')}${unit}`, String(name)]}
             />
             <Line
               type="linear"
               dataKey={indoorKey}
+              name="Indoor"
               stroke={colors.line}
               dot={false}
               strokeWidth={1.5}
@@ -621,6 +700,7 @@ function CompareSeries({
             <Line
               type="linear"
               dataKey={outdoorKey}
+              name="Outdoor"
               stroke={colors.avgLine}
               dot={false}
               strokeWidth={1.75}
