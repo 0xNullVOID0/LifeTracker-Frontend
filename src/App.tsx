@@ -1,6 +1,7 @@
 import {Navigate, Route, Routes, useLocation} from 'react-router-dom'
 import {useAuth} from './auth/AuthProvider.tsx'
 import {loginHref} from './returnPath.ts'
+import {HomePage} from './pages/HomePage.tsx'
 import {BuienradarPage} from './pages/BuienradarPage.tsx'
 import {ClimatePage} from './pages/ClimatePage.tsx'
 import {DayPage} from './pages/DayPage.tsx'
@@ -22,6 +23,14 @@ export default function App() {
   return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+            path="/home"
+            element={
+              <RequireAuth>
+                <HomePage />
+              </RequireAuth>
+            }
+        />
         <Route
             path="/day"
             element={
