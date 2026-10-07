@@ -11,7 +11,7 @@ import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
-import {GarminNav} from './GarminNav.tsx'
+import {GarminNav} from './NavBar.tsx'
 
 export function ClimatePage() {
   const { logout } = useAuth()
@@ -88,7 +88,7 @@ export function ClimatePage() {
         </button>
       </header>
 
-      <p className="lede">ESP32 measurements from the live Azure API. Garmin stays on your local API.</p>
+      <p className="lede">Room climate measurements from ESP32 + SCD40 sensor</p>
 
       {!azureToken ? (
         <form className="card" onSubmit={onAzureLogin}>
@@ -134,7 +134,7 @@ export function ClimatePage() {
             <>
               {requestedDate === todayLocal() && Math.round(newest(dayRows).cO2) >= 800 ? (
                 <p className={Math.round(newest(dayRows).cO2) >= 1200 ? 'warning warning-strong' : 'warning'}>
-                  CO₂ is {Math.round(newest(dayRows).cO2)} ppm. Open a window.
+                  CO₂ is {Math.round(newest(dayRows).cO2)} ppm. Open a window or door.
                 </p>
               ) : null}
               <section className="card metrics">

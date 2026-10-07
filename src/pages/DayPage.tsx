@@ -12,7 +12,7 @@ import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
-import {GarminNav} from './GarminNav.tsx'
+import {GarminNav} from './NavBar.tsx'
 import {StoredDays} from './StoredDays.tsx'
 
 function formatTimestamp(value: string): string {

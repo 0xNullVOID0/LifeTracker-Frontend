@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react'
-import {useSearchParams} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
@@ -21,7 +21,7 @@ import {
 } from '../sleepMath.ts'
 import type {GarminDay} from '../types/garmin.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
-import {GarminNav} from './GarminNav.tsx'
+import {GarminNav} from './NavBar.tsx'
 
 type Range = 'day' | 'week' | 'month'
 
@@ -33,6 +33,7 @@ function parseRange(value: string | null): Range {
 export function HomePage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const range = parseRange(searchParams.get('range'))
   const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])

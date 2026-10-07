@@ -220,10 +220,10 @@ export function SleepWeekChart({
   const data = memoOne(nights, () =>
     nights.map((night) => ({
       date: night.date,
-      deep: (night.sleep?.deepSleepSeconds ?? 0) / 3600,
+      awake: (night.sleep?.awakeSleepSeconds ?? 0) / 3600,
       light: (night.sleep?.lightSleepSeconds ?? 0) / 3600,
       rem: (night.sleep?.remSleepSeconds ?? 0) / 3600,
-      awake: (night.sleep?.awakeSleepSeconds ?? 0) / 3600,
+      deep: (night.sleep?.deepSleepSeconds ?? 0) / 3600,
       total: (night.sleep?.sleepTimeSeconds ?? 0) / 3600,
     })),
   )
@@ -280,7 +280,7 @@ export function SleepStagesChart({ sleep }: { sleep: DailySleep }) {
 
   return (
     <section className="card chart-card">
-      <h2>Sleep stages (hours)</h2>
+      <h2>Sleep stages</h2>
       <div className="chart chart-short">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>

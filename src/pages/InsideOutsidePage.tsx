@@ -13,7 +13,7 @@ import {buienradarDay} from '../seriesCache.ts'
 import {useDateState} from '../useDateState.ts'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
-import {GarminNav} from './GarminNav.tsx'
+import {GarminNav} from './NavBar.tsx'
 
 export function InsideOutsidePage() {
   const { logout } = useAuth()

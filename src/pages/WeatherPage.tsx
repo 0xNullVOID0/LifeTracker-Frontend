@@ -10,9 +10,9 @@ import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {buienradarDay} from '../seriesCache.ts'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
-import {GarminNav} from './GarminNav.tsx'
+import {GarminNav} from './NavBar.tsx'
 
-export function BuienradarPage() {
+export function WeatherPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const [rows, setRows] = useState<BuienradarMeasurement[] | null>(
@@ -35,7 +35,7 @@ export function BuienradarPage() {
       } catch (caught) {
         if (!isCurrent()) return
         if (mode === 'initial' && !hasCache(cacheKeys.buienradar)) setRows(null)
-        setError(caught instanceof ApiError ? caught.message : 'Could not load Buienradar')
+        setError(caught instanceof ApiError ? caught.message : 'Could not load Weather')
       }
     },
     liveMinuteMs,
@@ -55,7 +55,7 @@ export function BuienradarPage() {
       setRows(result)
       setError(null)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Buienradar sync failed')
+      setError(caught instanceof ApiError ? caught.message : 'Weather sync failed')
     } finally {
       setSyncing(false)
     }
@@ -65,7 +65,7 @@ export function BuienradarPage() {
     <main className="page wide">
       <header className="topbar">
         <div>
-          <h1>Buienradar</h1>
+          <h1>Weather</h1>
           <GarminNav />
         </div>
         <button type="button" className="ghost" onClick={logout}>
@@ -95,7 +95,7 @@ export function BuienradarPage() {
       {error ? <p className="error">{error}</p> : null}
 
       {!pending && dayRows.length === 0 ? (
-        <p className="empty">No Buienradar rows for {requestedDate}.</p>
+        <p className="empty">No Weather rows for {requestedDate}.</p>
       ) : null}
 
       {latest ? (
