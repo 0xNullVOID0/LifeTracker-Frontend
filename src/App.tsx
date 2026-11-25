@@ -8,6 +8,7 @@ import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {InsideOutsidePage} from './pages/InsideOutsidePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
+import {ReceiptPage} from './pages/ReceiptPage.tsx'
 import {SleepPage} from './pages/SleepPage.tsx'
 import {StressPage} from './pages/StressPage.tsx'
 import type {ReactNode} from 'react'
@@ -84,6 +85,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <InsideOutsidePage />
+              </RequireAuth>
+            }
+        />
+        <Route
+            path="/receipt"
+            element={
+              <RequireAuth>
+                <ReceiptPage />
               </RequireAuth>
             }
         />

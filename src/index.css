@@ -689,3 +689,44 @@ button.ghost {
     stroke: #3dd68c;
   }
 }
+
+.receipt-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.receipt-file-input {
+  display: none;
+}
+
+.receipt-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.receipt-preview-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.receipt-preview-zoom button {
+  padding: 0.15rem 0.6rem;
+}
+
+.receipt-preview-scroll {
+  overflow: auto;
+  max-height: 32rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.receipt-preview {
+  display: block;
+  min-width: 100%;
+  border-radius: 6px;
+}
