@@ -1,6 +1,6 @@
 import {type FormEvent, useState} from 'react'
 import {useSearchParams} from 'react-router-dom'
-import {parseDateParam, todayLocal} from './dates.ts'
+import {clampDate, parseDateParam, todayLocal} from './dates.ts'
 
 export function useRequestedDate() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -14,8 +14,9 @@ export function useRequestedDate() {
   }
 
   function writeDate(next: string) {
+    const clamped = clampDate(next)
     const nextParams = new URLSearchParams(searchParams)
-    nextParams.set('date', next)
+    nextParams.set('date', clamped)
     setSearchParams(nextParams, { replace: true })
   }
 
@@ -25,8 +26,9 @@ export function useRequestedDate() {
   }
 
   function requestDate(next: string) {
-    setDate(next)
-    writeDate(next)
+    const clamped = clampDate(next)
+    setDate(clamped)
+    writeDate(clamped)
   }
 
   return { date, setDate, requestedDate, onSubmit, requestDate }

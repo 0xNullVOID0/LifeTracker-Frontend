@@ -4,8 +4,8 @@ import {getAwakeWindow, getGarminDay, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
-import {dateQuery} from '../dates.ts'
+import {DateStepper} from '../DateStepper.tsx'
+import {addDays, dateQuery} from '../dates.ts'
 import {publishGarminDay, publishGarminDays} from '../garminCache.ts'
 import type {AwakeWindow, GarminDay} from '../types/garmin.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
@@ -13,7 +13,7 @@ import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './NavBar.tsx'
-import {StoredDays} from './StoredDays.tsx'
+import {StoredWeeks} from './StoredWeeks.tsx'
 
 function formatTimestamp(value: string): string {
   const parsed = new Date(value)
@@ -139,9 +139,10 @@ export function DayPage() {
       </header>
 
       <form className="toolbar" onSubmit={onSubmit}>
+        {/* TODO: add day/week/month range charts + stepping like SleepPage/HeartRatePage*/}
         <label>
           Date
-          <DatePicker value={date} onChange={requestDate} disabled={pending} />
+          <DateStepper value={date} onChange={requestDate} step={(iso, direction) => addDays(iso, direction)} disabled={pending} />
         </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
@@ -276,7 +277,15 @@ export function DayPage() {
         </>
       ) : null}
 
-      <StoredDays days={days} onSelectDate={requestDate} />
+      <StoredWeeks
+        days={days}
+        selectedDate={requestedDate}
+        onSelectDate={requestDate}
+        onSelectWeek={(weekStart) => {
+          const inWeek = days.filter((day) => day.date >= weekStart && day.date < addDays(weekStart, 7))
+          if (inWeek.length > 0) requestDate(inWeek.reduce((a, b) => (a.date > b.date ? a : b)).date)
+        }}
+      />
     </main>
   )
 }

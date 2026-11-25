@@ -6,8 +6,13 @@ export function todayLocal(): string {
 }
 
 export function parseDateParam(value: string | null): string | null {
-  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
-  return null
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  // No future dates: clamp a hand-edited ?date= (or any route date) to today so it can't point past now.
+  return clampDate(value)
+}
+
+export function clampDate(iso: string): string {
+  return iso > todayLocal() ? todayLocal() : iso
 }
 
 export function dateQuery(date: string): string {

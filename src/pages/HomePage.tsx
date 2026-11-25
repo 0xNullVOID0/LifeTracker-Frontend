@@ -6,8 +6,9 @@ import {useAuth} from '../auth/AuthProvider.tsx'
 import {HeartRateChart, HeartRateTrendChart, SleepWeekChart, type SleepWindow} from '../charts.tsx'
 import {cacheKeys, cachedSlice, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {publishGarminDays} from '../garminCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
-import {addDays, addMonths, fromIsoDate, formatSeconds, isoWeek} from '../dates.ts'
+import {DateStepper} from '../DateStepper.tsx'
+import {addDays, fromIsoDate, formatSeconds, isoWeek, startOfMonth, startOfWeek, todayLocal} from '../dates.ts'
+import {RangeToggle} from '../RangeToggle.tsx'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {liveMinuteMs, liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {
@@ -22,15 +23,11 @@ import {
   AWAKE_INACCURATE_SECONDS,
 } from '../sleepMath.ts'
 import type {DailySleep, GarminDay} from '../types/garmin.ts'
+import {type Range} from '../range.ts'
+import {useRange} from '../useRange.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './NavBar.tsx'
-
-type Range = 'day' | 'week' | 'month'
-
-function parseRange(value: string | null): Range {
-  if (value === 'day' || value === 'week' || value === 'month') return value
-  return 'week'
-}
+import {StoredWeeks} from './StoredWeeks.tsx'
 
 function sleepWindowFromSleep(sleep: DailySleep): SleepWindow | null {
   const start = new Date(sleep.startLocal).getTime()
@@ -44,7 +41,7 @@ export function HomePage() {
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const range = parseRange(searchParams.get('range'))
+  const [range, setRange, stepDate] = useRange('week')
   const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => new Date())
@@ -125,17 +122,28 @@ export function HomePage() {
 
   const sleepTitle =
     range === 'month'
-      ? `Sleep for ${fromIsoDate(requestedDate).toLocaleString(undefined, { month: 'long', year: 'numeric' })}`
+      ? `Sleep for ${fromIsoDate(requestedDate).toLocaleString(undefined, { month: 'long' })}`
       : `Sleep for Week ${isoWeek(requestedDate)}`
 
-  function stepDate(direction: -1 | 1): string {
-    if (range === 'month') return addMonths(requestedDate, direction)
-    return addDays(requestedDate, direction * (range === 'week' ? 7 : 1))
-  }
+  const heartTitle =
+    range === 'month'
+      ? `Heart rate for ${fromIsoDate(requestedDate).toLocaleString(undefined, { month: 'long' })}`
+      : range === 'week'
+        ? `Heart rate for Week ${isoWeek(requestedDate)}`
+        : 'Heart rate'
 
-  function setRange(next: Range) {
+  // The live rows (awake / since / recommended times) only make sense for the current period.
+  const isCurrentPeriod =
+    range === 'day'
+      ? requestedDate === todayLocal()
+      : range === 'week'
+        ? requestedDate >= startOfWeek(todayLocal())
+        : requestedDate >= startOfMonth(todayLocal())
+
+  function selectStored(next: Range, nextDate: string) {
     const nextParams = new URLSearchParams(searchParams)
     nextParams.set('range', next)
+    nextParams.set('date', nextDate)
     setSearchParams(nextParams, { replace: true })
   }
 
@@ -154,106 +162,93 @@ export function HomePage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <div className="date-stepper">
-            <button
-              type="button"
-              className="step-btn"
-              onClick={() => requestDate(stepDate(-1))}
-              aria-label="Previous"
-            >
-              ‹
-            </button>
-            <DatePicker value={date} onChange={requestDate} />
-            <button type="button" className="step-btn" onClick={() => requestDate(stepDate(1))} aria-label="Next">
-              ›
-            </button>
-          </div>
+          <DateStepper value={date} onChange={requestDate} step={stepDate} />
         </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} />
           <UpdateNowButton onClick={updateNow} pending={activityLoading} cooldownMs={cooldownMs} />
         </div>
-        <div className="range-toggle">
-          <button type="button" className={range === 'day' ? 'active' : ''} onClick={() => setRange('day')}>
-            Day
-          </button>
-          <button type="button" className={range === 'week' ? 'active' : ''} onClick={() => setRange('week')}>
-            Week
-          </button>
-          <button type="button" className={range === 'month' ? 'active' : ''} onClick={() => setRange('month')}>
-            Month
-          </button>
-        </div>
+        <RangeToggle value={range} onChange={setRange} />
       </form>
 
       {error ? <p className="error">{error}</p> : null}
 
-      <section className="card metrics">
-        <p>
-          <span>Awake</span>
-          <strong className="live-awake">
-            {sleeping ? 'Asleep' : awakeSeconds != null ? formatSeconds(awakeSeconds) : '—'}
-            {!sleeping && awakeSeconds != null && awakeInaccurate ? (
-              <svg className="awake-flag" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M6 1L11.4 10.5H0.6L6 1z" fill="currentColor" />
-                <path d="M6 4.2v2.8" stroke="var(--card)" strokeWidth="1.1" strokeLinecap="round" />
-                <circle cx="6" cy="8.6" r="0.6" fill="var(--card)" />
-              </svg>
-            ) : null}
-          </strong>
-        </p>
-        {awakeInaccurate && awakeSeconds != null ? (
-          <p className="awake-notice">Awake for over {formatSeconds(AWAKE_INACCURATE_SECONDS)}, Sleep data may be inaccurate or not synced yet.</p>
-        ) : null}
-        {wake && !sleeping ? (
-          <p>
-            <span>Since</span>
-            <strong>{wake.toLocaleString(undefined, { hour12: false })}</strong>
-          </p>
-        ) : null}
-        {recommended && !sleeping ? (
-          <>
-            <p>
-              <span>Recommended bed</span>
-              <strong>
-                {recommended.bed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}
-                {now.getTime() > recommended.bed.getTime() ? ' (overdue)' : ''}
-              </strong>
-            </p>
-            <p>
-              <span>Recommended wake</span>
-              <strong>{recommended.nextWake.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}</strong>
-            </p>
-          </>
-        ) : null}
-        <p>
-          <span>Sleep this {range}</span>
-          <strong>{formatSeconds(stats.totalSeconds)}</strong>
-        </p>
-        <p>
-          <span>Target ({stats.nights} × 8h)</span>
-          <strong>{formatSeconds(stats.targetSeconds)}</strong>
-        </p>
-        <p>
-          <span>Shortfall</span>
-          <strong>{formatSeconds(stats.shortfallSeconds)}</strong>
-        </p>
-        <p className="empty">
-          Extra sleep on long nights do not cancel sleep debt.
-        </p>
-      </section>
+      <StoredWeeks
+        days={days}
+        selectedDate={requestedDate}
+        onSelectDate={(iso) => selectStored('day', iso)}
+        onSelectWeek={(weekStart) => selectStored('week', weekStart)}
+      />
 
-      {heartSamples.length > 0 ? (
+      {isCurrentPeriod ? (
+        <section className="card metrics">
+          <p>
+            <span>Awake</span>
+            <strong className="live-awake">
+              {sleeping ? 'Asleep' : awakeSeconds != null ? formatSeconds(awakeSeconds) : '—'}
+              {!sleeping && awakeSeconds != null && awakeInaccurate ? (
+                <svg className="awake-flag" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M6 1L11.4 10.5H0.6L6 1z" fill="currentColor" />
+                  <path d="M6 4.2v2.8" stroke="var(--card)" strokeWidth="1.1" strokeLinecap="round" />
+                  <circle cx="6" cy="8.6" r="0.6" fill="var(--card)" />
+                </svg>
+              ) : null}
+            </strong>
+          </p>
+          {awakeInaccurate && awakeSeconds != null ? (
+            <p className="awake-notice">Awake for over {formatSeconds(AWAKE_INACCURATE_SECONDS)}, Sleep data may be inaccurate or not synced yet.</p>
+          ) : null}
+          {wake && !sleeping ? (
+            <p>
+              <span>Since</span>
+              <strong>{wake.toLocaleString(undefined, { hour12: false })}</strong>
+            </p>
+          ) : null}
+          {recommended && !sleeping ? (
+            <>
+              <p>
+                <span>Recommended bed</span>
+                <strong>
+                  {recommended.bed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}
+                  {now.getTime() > recommended.bed.getTime() ? ' (overdue)' : ''}
+                </strong>
+              </p>
+              <p>
+                <span>Recommended wake</span>
+                <strong>{recommended.nextWake.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}</strong>
+              </p>
+            </>
+          ) : null}
+          <p>
+            <span>Sleep this {range}</span>
+            <strong>{formatSeconds(stats.totalSeconds)}</strong>
+          </p>
+          <p>
+            <span>Target ({stats.nights} × 8h)</span>
+            <strong>{formatSeconds(stats.targetSeconds)}</strong>
+          </p>
+          <p>
+            <span>Shortfall</span>
+            <strong>{formatSeconds(stats.shortfallSeconds)}</strong>
+          </p>
+          <p className="empty">
+            Extra sleep on long nights do not cancel sleep debt.
+          </p>
+        </section>
+      ) : null}
+
+      {range !== 'month' ? (
         <HeartRateChart
           samples={heartSamples}
           sleepWindows={heartSleepWindows}
           multiDay={range === 'week'}
-          title={range === 'week' ? 'BPM this week' : 'BPM'}
+          title={heartTitle}
+          onSelect={(iso) => navigate(`/heartrate?date=${iso}`)}
         />
       ) : null}
 
       {range === 'month' ? (
-        <HeartRateTrendChart days={heartRateTrendDays} title="Heart rate month" />
+        <HeartRateTrendChart days={heartRateTrendDays} title={heartTitle} />
       ) : null}
 
       {range !== 'day' ? (

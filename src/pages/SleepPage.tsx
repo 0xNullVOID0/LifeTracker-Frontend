@@ -5,13 +5,15 @@ import {useAuth} from '../auth/AuthProvider.tsx'
 import type {AwakeWindow, DailySleep, GarminDay} from '../types/garmin.ts'
 import {SleepStagesChart, SleepWeekChart} from '../charts.tsx'
 import {cacheKeys, cachedSlice, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
-import {formatSeconds} from '../dates.ts'
+import {DateStepper} from '../DateStepper.tsx'
+import {fromIsoDate, formatSeconds, isoWeek} from '../dates.ts'
 import {publishGarminDays} from '../garminCache.ts'
-import {sleepByDate, weekDates} from '../sleepMath.ts'
+import {monthDates, sleepByDate, weekDates} from '../sleepMath.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
+import {RangeToggle} from '../RangeToggle.tsx'
 import {useDateState} from '../useDateState.ts'
 import {liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
+import {useRange} from '../useRange.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './NavBar.tsx'
 
@@ -39,6 +41,7 @@ function loadErrorMessage(caught: unknown, fallback: string): string {
 export function SleepPage() {
   const { logout } = useAuth()
   const { date, requestedDate, onSubmit, requestDate } = useRequestedDate()
+  const [range, setRange, stepDate] = useRange('day')
   const [data, setData] = useDateState(
     requestedDate,
     (day) => readCache<DailySleep | null>(cacheKeys.sleep(day))?.value,
@@ -111,10 +114,15 @@ export function SleepPage() {
     },
   )
 
-  const weekNights = cachedSlice(days, `sleep-nights:${requestedDate}`, () => {
+  const periodNights = cachedSlice(days, `sleep-nights:${range}:${requestedDate}`, () => {
     const map = sleepByDate(days)
-    return weekDates(requestedDate).map((iso) => ({ date: iso, sleep: map.get(iso) ?? null }))
+    const dates = range === 'month' ? monthDates(requestedDate) : weekDates(requestedDate)
+    return dates.map((iso) => ({ date: iso, sleep: map.get(iso) ?? null }))
   })
+  const periodTitle =
+    range === 'month'
+      ? `Sleep for ${fromIsoDate(requestedDate).toLocaleString(undefined, { month: 'long' })}`
+      : `Sleep for Week ${isoWeek(requestedDate)}`
 
   return (
     <main className="page wide">
@@ -131,7 +139,7 @@ export function SleepPage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <DatePicker value={date} onChange={requestDate} disabled={pending} />
+          <DateStepper value={date} onChange={requestDate} step={stepDate} disabled={pending} />
         </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
@@ -140,93 +148,105 @@ export function SleepPage() {
           </button>
           <UpdateNowButton onClick={updateNow} pending={pending} cooldownMs={cooldownMs} />
         </div>
+        <RangeToggle value={range} onChange={setRange} />
       </form>
 
       {error ? <p className="error">{error}</p> : null}
       {awakeError ? <p className="error">{awakeError}</p> : null}
 
-      <SleepWeekChart nights={weekNights} selected={requestedDate} onSelect={requestDate} />
-
-      {empty && !error ? (
-        <p className="empty">
-          No sleep row for {requestedDate} (204). Try another date, or sync / seed Garmin sleep.
-        </p>
+      {range !== 'day' ? (
+        <SleepWeekChart
+          nights={periodNights}
+          selected={requestedDate}
+          onSelect={requestDate}
+          title={periodTitle}
+        />
       ) : null}
 
-      {data ? (
+      {range === 'day' ? (
         <>
-          <SleepStagesChart sleep={data} />
-        <section className="card metrics">
-          <p>
-            <span>Date</span>
-            <strong>{data.date}</strong>
-          </p>
-          <p>
-            <span>Start (local)</span>
-            <strong>{formatTimestamp(data.startLocal)}</strong>
-          </p>
-          <p>
-            <span>End (local)</span>
-            <strong>{formatTimestamp(data.endLocal)}</strong>
-          </p>
-          <p>
-            <span>Sleep time</span>
-            <strong>{formatSeconds(data.sleepTimeSeconds)}</strong>
-          </p>
-          <p>
-            <span>Deep</span>
-            <strong>{formatSeconds(data.deepSleepSeconds)}</strong>
-          </p>
-          <p>
-            <span>Light</span>
-            <strong>{formatSeconds(data.lightSleepSeconds)}</strong>
-          </p>
-          <p>
-            <span>REM</span>
-            <strong>{formatSeconds(data.remSleepSeconds)}</strong>
-          </p>
-          <p>
-            <span>Awake in bed</span>
-            <strong>{formatSeconds(data.awakeSleepSeconds)}</strong>
-          </p>
-          <p>
-            <span>Avg heart rate</span>
-            <strong>{data.avgHeartRate}</strong>
-          </p>
-          <p>
-            <span>Avg sleep stress</span>
-            <strong>{data.avgSleepStress}</strong>
-          </p>
-        </section>
+          {empty && !error ? (
+            <p className="empty">
+              No sleep row for {requestedDate} (204). Try another date, or sync / seed Garmin sleep.
+            </p>
+          ) : null}
+
+          {data ? (
+            <>
+              <SleepStagesChart sleep={data} />
+              <section className="card metrics">
+                <p>
+                  <span>Date</span>
+                  <strong>{data.date}</strong>
+                </p>
+                <p>
+                  <span>Start (local)</span>
+                  <strong>{formatTimestamp(data.startLocal)}</strong>
+                </p>
+                <p>
+                  <span>End (local)</span>
+                  <strong>{formatTimestamp(data.endLocal)}</strong>
+                </p>
+                <p>
+                  <span>Sleep time</span>
+                  <strong>{formatSeconds(data.sleepTimeSeconds)}</strong>
+                </p>
+                <p>
+                  <span>Deep</span>
+                  <strong>{formatSeconds(data.deepSleepSeconds)}</strong>
+                </p>
+                <p>
+                  <span>Light</span>
+                  <strong>{formatSeconds(data.lightSleepSeconds)}</strong>
+                </p>
+                <p>
+                  <span>REM</span>
+                  <strong>{formatSeconds(data.remSleepSeconds)}</strong>
+                </p>
+                <p>
+                  <span>Awake in bed</span>
+                  <strong>{formatSeconds(data.awakeSleepSeconds)}</strong>
+                </p>
+                <p>
+                  <span>Avg heart rate</span>
+                  <strong>{data.avgHeartRate}</strong>
+                </p>
+                <p>
+                  <span>Avg sleep stress</span>
+                  <strong>{data.avgSleepStress}</strong>
+                </p>
+              </section>
+            </>
+          ) : null}
+
+          {awake ? (
+            <section className="card metrics">
+              <p>
+                <span>Awake window</span>
+                <strong>
+                  {awake.priorSleepID} → {awake.subsequentSleepID}
+                </strong>
+              </p>
+              <p>
+                <span>From</span>
+                <strong>{formatTimestamp(awake.startLocal)}</strong>
+              </p>
+              <p>
+                <span>Until</span>
+                <strong>{formatTimestamp(awake.endLocal)}</strong>
+              </p>
+              <p>
+                {/* TODO Duration or Awake for */}
+                <span>Awake for</span>
+                <strong>{formatTimeSpan(awake.duration)}</strong>
+              </p>
+            </section>
+          ) : null}
+
+          {data && !awake && !awakeError ? (
+            <p className="empty">No awake window for {requestedDate} (204). Needs the previous night's sleep row.</p>
+          ) : null}
         </>
-      ) : null}
-
-      {awake ? (
-        <section className="card metrics">
-          <p>
-            <span>Awake window</span>
-            <strong>
-              {awake.priorSleepID} → {awake.subsequentSleepID}
-            </strong>
-          </p>
-          <p>
-            <span>From</span>
-            <strong>{formatTimestamp(awake.startLocal)}</strong>
-          </p>
-          <p>
-            <span>Until</span>
-            <strong>{formatTimestamp(awake.endLocal)}</strong>
-          </p>
-          <p>
-            {/* TODO Duration or Awake for */}
-            <span>Awake for</span>
-            <strong>{formatTimeSpan(awake.duration)}</strong>
-          </p>
-        </section>
-      ) : null}
-
-      {data && !awake && !awakeError ? (
-        <p className="empty">No awake window for {requestedDate} (204). Needs the previous night's sleep row.</p>
       ) : null}
     </main>
   )

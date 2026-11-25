@@ -5,8 +5,8 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {RoomClimateCharts} from '../charts.tsx'
 import {cacheKeys, dropCache, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
-import {todayLocal} from '../dates.ts'
+import {DateStepper} from '../DateStepper.tsx'
+import {addDays, todayLocal} from '../dates.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
@@ -111,9 +111,10 @@ export function ClimatePage() {
       ) : (
         <>
           <form className="toolbar" onSubmit={onSubmit}>
+        {/* TODO: add day/week/month range charts + stepping like SleepPage/HeartRatePage*/}
             <label>
               Date
-              <DatePicker value={date} onChange={requestDate} disabled={pending} />
+              <DateStepper value={date} onChange={requestDate} step={(iso, direction) => addDays(iso, direction)} disabled={pending} />
             </label>
             <div className="toolbar-actions">
               <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />

@@ -11,6 +11,7 @@ type DatePickerProps = {
 
 export function DatePicker({ value, onChange, disabled }: DatePickerProps) {
   const selected = fromIsoDate(value)
+  const today = fromIsoDate(todayLocal())
   const [open, setOpen] = useState(false)
   const [month, setMonth] = useState(selected)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -71,8 +72,9 @@ export function DatePicker({ value, onChange, disabled }: DatePickerProps) {
             }}
             captionLayout="dropdown"
             startMonth={new Date(2020, 0)}
-            endMonth={new Date(new Date().getFullYear() + 1, 11)}
-            today={fromIsoDate(todayLocal())}
+            endMonth={today}
+            disabled={{ after: today }}
+            today={today}
             weekStartsOn={1}
           />
         </div>

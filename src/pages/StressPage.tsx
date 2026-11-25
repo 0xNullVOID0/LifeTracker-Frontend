@@ -1,11 +1,12 @@
-﻿import {useState} from 'react'
+﻿import {useMemo, useState} from 'react'
 import {getDailyStress, getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyStress, GarminDay} from '../types/garmin.ts'
 import {StressTrendChart} from '../charts.tsx'
 import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
+import {DateStepper} from '../DateStepper.tsx'
+import {addDays} from '../dates.ts'
 import {publishGarminDays} from '../garminCache.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {useDateState} from '../useDateState.ts'
@@ -94,9 +95,10 @@ export function StressPage() {
       </header>
 
       <form className="toolbar" onSubmit={onSubmit}>
+        {/* TODO: add day/week/month range charts + stepping like SleepPage/HeartRatePage*/}
         <label>
           Date
-          <DatePicker value={date} onChange={requestDate} disabled={pending} />
+          <DateStepper value={date} onChange={requestDate} step={(iso, direction) => addDays(iso, direction)} disabled={pending} />
         </label>
         <label>
           Trend month

@@ -5,7 +5,8 @@ import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
 import {IndoorOutdoorCharts} from '../charts.tsx'
 import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DatePicker} from '../DatePicker.tsx'
+import {DateStepper} from '../DateStepper.tsx'
+import {addDays} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
@@ -93,7 +94,7 @@ export function InsideOutsidePage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <DatePicker value={date} onChange={requestDate} disabled={pending} />
+          <DateStepper value={date} onChange={requestDate} step={(iso, direction) => addDays(iso, direction)} disabled={pending} />
         </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />

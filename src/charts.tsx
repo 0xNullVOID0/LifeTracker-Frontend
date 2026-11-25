@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts'
 import {memoOne, memoTwo} from './dataCache.ts'
-import {formatTimeInZone, parseClimateTimestamp} from './dates.ts'
+import {formatTimeInZone, parseClimateTimestamp, toIsoDate} from './dates.ts'
 import type {BuienradarMeasurement} from './types/buienradar.ts'
 import type {RoomClimateMeasurement} from './types/climate.ts'
 import type {DailySleep, GarminDay, HeartRateSample} from './types/garmin.ts'
@@ -151,11 +151,13 @@ export function HeartRateChart({
   sleepWindows = [],
   multiDay = false,
   title = 'BPM',
+  onSelect,
 }: {
   samples: HeartRateSample[]
   sleepWindows?: SleepWindow[]
   multiDay?: boolean
   title?: string
+  onSelect?: (iso: string) => void
 }) {
   const colors = useChartColors()
   const data = memoOne(samples, () => {
@@ -177,7 +179,14 @@ export function HeartRateChart({
       (t) => ({ t, sleeping: false, bpm: null, avg: null }),
     )
   })
-  if (data.length === 0) return null
+  if (data.length === 0) {
+    return (
+      <section className="card chart-card">
+        <h2>{title}</h2>
+        <p className="empty">No heart rate data for this period.</p>
+      </section>
+    )
+  }
   const bpms = data.map((sample) => sample.bpm).filter((bpm): bpm is number => bpm != null)
   const yMin = Math.max(0, Math.min(...bpms) - 4)
   const yMax = Math.max(...bpms) + 4
@@ -208,7 +217,16 @@ export function HeartRateChart({
       </p>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            onClick={(state) => {
+              const payload = state as { activeLabel?: number | string } | undefined
+              const label = payload?.activeLabel
+              if (label == null || !onSelect) return
+              onSelect(toIsoDate(new Date(Number(label))))
+            }}
+          >
             {bands.map((band) => (
               <ReferenceArea
                 key={`${band.start}-${band.end}`}
@@ -275,7 +293,14 @@ export function HeartRateTrendChart({ days, title = 'Heart rate trend' }: { days
       .sort((a, b) => a.date.localeCompare(b.date)),
   )
 
-  if (data.length === 0) return null
+  if (data.length === 0) {
+    return (
+      <section className="card chart-card">
+        <h2>{title}</h2>
+        <p className="empty">No heart rate data for this period.</p>
+      </section>
+    )
+  }
 
   return (
     <section className="card chart-card">
@@ -330,6 +355,16 @@ export function SleepWeekChart({
       total: (night.sleep?.sleepTimeSeconds ?? 0) / 3600,
     })),
   )
+  const hasSleep = nights.some((night) => night.sleep)
+
+  if (!hasSleep) {
+    return (
+      <section className="card chart-card">
+        <h2>{title}</h2>
+        <p className="empty">No sleep data for this period.</p>
+      </section>
+    )
+  }
 
   return (
     <section className="card chart-card">
@@ -434,6 +469,10 @@ export function StressTrendChart({ days }: { days: GarminDay[] }) {
   return (
     <section className="card chart-card">
       <h2>Stress trend</h2>
+      <p className="chart-legend">
+        <span className="swatch stress-avg" /> Average
+        <span className="swatch stress-max" /> Max
+      </p>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>

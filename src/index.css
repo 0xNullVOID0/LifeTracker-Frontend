@@ -356,6 +356,70 @@ button.ghost {
   margin-left: 0.4rem;
 }
 
+.stored-weeks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stored-week button.link {
+  font-family: var(--mono);
+}
+
+.stored-week.active button.link {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stored-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.stored-day {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.stored-day-date {
+  flex: 1 1 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stored-day-flag {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+.stored-day.active {
+  background: var(--accent);
+  color: var(--card);
+  border-color: var(--accent);
+}
+
+.stored-day.active .stored-day-flag {
+  color: var(--card);
+  opacity: 0.7;
+}
+
 .metrics p {
   display: flex;
   justify-content: space-between;
@@ -455,6 +519,24 @@ button.ghost {
 
   .swatch.sleep {
     opacity: 0.45;
+  }
+}
+
+.swatch.stress-avg {
+  background: #3d2b56;
+}
+
+.swatch.stress-max {
+  background: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  .swatch.stress-avg {
+    background: #d4c4ea;
+  }
+
+  .swatch.stress-max {
+    background: #f97066;
   }
 }
 
