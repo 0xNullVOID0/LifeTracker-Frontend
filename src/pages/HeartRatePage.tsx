@@ -16,7 +16,7 @@ import {GarminNav} from './NavBar.tsx'
 function formatTimestamp(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString()
+  return parsed.toLocaleString(undefined, { hour12: false })
 }
 
 function readSleepWindows(date: string): SleepWindow[] | undefined {

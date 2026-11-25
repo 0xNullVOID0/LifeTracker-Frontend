@@ -6,6 +6,7 @@
   --border: #e5e4e7;
   --accent: #3d2b56;
   --error: #b42318;
+  --warning: #c47d18;
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
@@ -24,6 +25,7 @@
     --border: #2e303a;
     --accent: #d4c4ea;
     --error: #f97066;
+    --warning: #e3a13b;
   }
 }
 
@@ -309,6 +311,17 @@ button.ghost {
   margin: 0;
 }
 
+.awake-notice {
+  margin: 0;
+  color: var(--warning);
+}
+
+.awake-flag {
+  color: var(--warning);
+  vertical-align: -0.2rem;
+  margin-left: 0.4rem;
+}
+
 .metrics p {
   display: flex;
   justify-content: space-between;
@@ -351,6 +364,20 @@ button.ghost {
 .chart-card .chart {
   width: 100%;
   height: 16rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* recharts data-viz focus rings: suppress the white box that shows on
+   click/selection and on first load. Scope to recharts-internal focusable
+   elements only so real form controls keep their focus outlines. */
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-tooltip-wrapper:focus,
+.recharts-tooltip-wrapper:focus-visible,
+[class*="recharts-zIndex-layer"]:focus,
+[class*="recharts-zIndex-layer"]:focus-visible {
+  outline: none;
 }
 
 .chart-card .chart-short {

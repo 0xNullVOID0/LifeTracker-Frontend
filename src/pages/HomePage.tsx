@@ -18,8 +18,10 @@ import {
   sleepByDate,
   sleepStatsForDates,
   weekDates,
+  AWAKE_CAP_SECONDS,
+  AWAKE_INACCURATE_SECONDS,
 } from '../sleepMath.ts'
-import type {GarminDay} from '../types/garmin.ts'
+import type {DailySleep, GarminDay} from '../types/garmin.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
 import {GarminNav} from './NavBar.tsx'
 
@@ -28,6 +30,13 @@ type Range = 'day' | 'week' | 'month'
 function parseRange(value: string | null): Range {
   if (value === 'day' || value === 'week' || value === 'month') return value
   return 'week'
+}
+
+function sleepWindowFromSleep(sleep: DailySleep): SleepWindow | null {
+  const start = new Date(sleep.startLocal).getTime()
+  const end = new Date(sleep.endLocal).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null
+  return { start, end }
 }
 
 export function HomePage() {
@@ -89,7 +98,10 @@ export function HomePage() {
   const sleeping = activeSleep(days, now)
   const wake = awakeSince(days, now)
   const recommended = wake ? recommendedTimes(wake) : null
-  const today = todayLocal()
+  const awakeSeconds = !sleeping && wake
+    ? Math.min(AWAKE_CAP_SECONDS, Math.floor((now.getTime() - wake.getTime()) / 1000))
+    : null
+  const awakeInaccurate = awakeSeconds != null && awakeSeconds > AWAKE_INACCURATE_SECONDS
 
   function setRange(next: Range) {
     const nextParams = new URLSearchParams(searchParams)
@@ -137,13 +149,23 @@ export function HomePage() {
         <p>
           <span>Awake</span>
           <strong className="live-awake">
-            {sleeping ? 'Asleep' : wake ? formatSeconds(Math.floor((now.getTime() - wake.getTime()) / 1000)) : '—'}
+            {sleeping ? 'Asleep' : awakeSeconds != null ? formatSeconds(awakeSeconds) : '—'}
+            {!sleeping && awakeSeconds != null && awakeInaccurate ? (
+              <svg className="awake-flag" width="14" height="14" viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M6 1L11.4 10.5H0.6L6 1z" fill="currentColor" />
+                <path d="M6 4.2v2.8" stroke="var(--card)" strokeWidth="1.1" strokeLinecap="round" />
+                <circle cx="6" cy="8.6" r="0.6" fill="var(--card)" />
+              </svg>
+            ) : null}
           </strong>
         </p>
+        {awakeInaccurate && awakeSeconds != null ? (
+          <p className="awake-notice">Awake for over {formatSeconds(AWAKE_INACCURATE_SECONDS)}, Sleep data may be inaccurate or not synced yet.</p>
+        ) : null}
         {wake && !sleeping ? (
           <p>
             <span>Since</span>
-            <strong>{wake.toLocaleString()}</strong>
+            <strong>{wake.toLocaleString(undefined, { hour12: false })}</strong>
           </p>
         ) : null}
         {recommended && !sleeping ? (
@@ -151,13 +173,13 @@ export function HomePage() {
             <p>
               <span>Recommended bed</span>
               <strong>
-                {recommended.bed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                {recommended.bed.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}
                 {now.getTime() > recommended.bed.getTime() ? ' (overdue)' : ''}
               </strong>
             </p>
             <p>
               <span>Recommended wake</span>
-              <strong>{recommended.nextWake.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</strong>
+              <strong>{recommended.nextWake.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}</strong>
             </p>
           </>
         ) : null}

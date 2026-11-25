@@ -67,6 +67,7 @@ export function formatTimeInZone(value: Date | number, timeZone = appTimeZone): 
   return new Date(value).toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
     timeZone,
   })
 }

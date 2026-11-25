@@ -4,6 +4,9 @@ import {addDays, formatMs, formatSeconds, fromIsoDate, startOfMonth, startOfWeek
 export const TARGET_SLEEP_SECONDS = 8 * 3600
 export const TARGET_WAKE_MS = 16 * 60 * 60 * 1000
 
+export const AWAKE_CAP_SECONDS = 32 * 3600
+export const AWAKE_INACCURATE_SECONDS = 24 * 3600
+
 export function parseTimeSpanMs(value: string): number | null {
   const match = /^(?:(\d+)\.)?(\d{1,2}):(\d{2}):(\d{2})/.exec(value)
   if (!match) return null
