@@ -5,7 +5,7 @@ import {useAuth} from '../auth/AuthProvider.tsx'
 import type {DailyStress, GarminDay} from '../types/garmin.ts'
 import {StressTrendChart} from '../charts.tsx'
 import {cacheKeys, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
-import {DateStepper} from '../DateStepper.tsx'
+import {DateStepper, StepChevron} from '../DateStepper.tsx'
 import {addDays} from '../dates.ts'
 import {publishGarminDays} from '../garminCache.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
@@ -104,11 +104,11 @@ export function StressPage() {
           Trend month
           <div className="date-stepper">
             <button type="button" className="step-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-              ‹
+              <StepChevron direction={-1} />
             </button>
             <span className="month-label">{monthLabel}</span>
             <button type="button" className="step-btn" onClick={() => shiftMonth(1)} aria-label="Next month">
-              ›
+              <StepChevron direction={1} />
             </button>
           </div>
         </label>
