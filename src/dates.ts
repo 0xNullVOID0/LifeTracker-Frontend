@@ -31,6 +31,25 @@ export function addDays(iso: string, days: number): string {
   return toIsoDate(next)
 }
 
+export function addMonths(iso: string, months: number): string {
+  const next = fromIsoDate(iso)
+  next.setDate(1)
+  next.setMonth(next.getMonth() + months)
+  return toIsoDate(next)
+}
+
+export function isoWeek(iso: string): number {
+  const date = fromIsoDate(iso)
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNr = (target.getUTCDay() + 6) % 7
+  target.setUTCDate(target.getUTCDate() - dayNr + 3) // Thursday of the week decides the ISO year
+  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 1))
+  if (firstThursday.getUTCDay() !== 4) {
+    firstThursday.setUTCMonth(0, 1 + ((4 - firstThursday.getUTCDay() + 7) % 7))
+  }
+  return 1 + Math.ceil((target.getTime() - firstThursday.getTime()) / 604800000)
+}
+
 export function startOfWeek(iso: string): string {
   const date = fromIsoDate(iso)
   const weekday = date.getDay()

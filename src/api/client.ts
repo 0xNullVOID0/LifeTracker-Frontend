@@ -49,7 +49,7 @@ function errorMessage(status: number, body: unknown): string {
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T | null> {
   const headers = new Headers(init.headers)
-  if (init.body !== undefined && !headers.has('Content-Type')) {
+  if (init.body !== undefined && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
 

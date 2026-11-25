@@ -167,6 +167,40 @@ label {
   position: relative;
 }
 
+.date-stepper {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.date-stepper .datepicker {
+  flex: 1;
+}
+
+.month-label {
+  display: grid;
+  place-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--card);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.step-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
 .datepicker-trigger {
   width: 100%;
   text-align: left;

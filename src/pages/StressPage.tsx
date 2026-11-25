@@ -23,7 +23,22 @@ export function StressPage() {
   )
   const [error, setError] = useState<string | null>(null)
   const [days, setDays] = useState<GarminDay[]>(() => readCache<GarminDay[]>(cacheKeys.garminDays)?.value ?? [])
+  const [month, setMonth] = useState(() => date.slice(0, 7))
   const empty = hasCache(cacheKeys.stress(requestedDate)) && data === null
+
+  function shiftMonth(delta: number) {
+    setMonth((current) => {
+      const [year, monthIndex] = current.split('-').map(Number)
+      const next = new Date(year, monthIndex - 1 + delta, 1)
+      return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`
+    })
+  }
+
+  const trendDays = useMemo(
+    () => days.filter((day) => day.date.startsWith(month) && day.stress),
+    [days, month],
+  )
+  const monthLabel = new Date(`${month}-01T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const { pending, cooldownMs, updateNow } = useLiveRefresh(
     requestedDate,
     async ({ mode, isCurrent }) => {
@@ -83,6 +98,18 @@ export function StressPage() {
           Date
           <DatePicker value={date} onChange={requestDate} disabled={pending} />
         </label>
+        <label>
+          Trend month
+          <div className="date-stepper">
+            <button type="button" className="step-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+              ‹
+            </button>
+            <span className="month-label">{monthLabel}</span>
+            <button type="button" className="step-btn" onClick={() => shiftMonth(1)} aria-label="Next month">
+              ›
+            </button>
+          </div>
+        </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} disabled={pending} />
           <button type="submit" disabled={pending}>
@@ -98,7 +125,11 @@ export function StressPage() {
         <p className="empty">No stress row for {requestedDate} (204). Try another date, or run Demo compose so seed data exists.</p>
       ) : null}
 
-      <StressTrendChart days={days} />
+      {trendDays.length === 0 ? (
+        <p className="empty">No stress data for {monthLabel}.</p>
+      ) : (
+        <StressTrendChart days={trendDays} />
+      )}
 
       {data ? (
         <section className="card metrics">

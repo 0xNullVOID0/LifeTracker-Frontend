@@ -44,18 +44,26 @@ function useChartColors() {
 
 const averageWindowMs = 40 * 60 * 1000
 
+// points must be sorted ascending by t
 function rollingAverage(points: { t: number; bpm: number }[]): number[] {
-  return points.map((point) => {
-    let sum = 0
-    let count = 0
-    for (const other of points) {
-      if (Math.abs(other.t - point.t) <= averageWindowMs / 2) {
-        sum += other.bpm
-        count += 1
-      }
+  const half = averageWindowMs / 2
+  const out = new Array<number>(points.length)
+  let lo = 0
+  let hi = -1
+  let sum = 0
+  for (let i = 0; i < points.length; i++) {
+    const center = points[i].t
+    while (hi + 1 < points.length && points[hi + 1].t <= center + half) {
+      hi += 1
+      sum += points[hi].bpm
     }
-    return count > 0 ? sum / count : point.bpm
-  })
+    while (lo <= hi && points[lo].t < center - half) {
+      sum -= points[lo].bpm
+      lo += 1
+    }
+    out[i] = lo <= hi ? sum / (hi - lo + 1) : points[i].bpm
+  }
+  return out
 }
 
 export type SleepWindow = { start: number; end: number }
@@ -77,7 +85,33 @@ function sleepRangesFromSamples(samples: { t: number; sleeping: boolean }[]): Sl
 }
 
 function formatTickTime(value: number): string {
-  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+// Median of a numeric array in place, expected O(n); the array must not be needed sorted afterwards.
+function selectMedian(gaps: number[]): number {
+  const target = Math.floor(gaps.length / 2)
+  let lo = 0
+  let hi = gaps.length - 1
+  while (lo < hi) {
+    const pivot = gaps[(lo + hi) >> 1]
+    let i = lo
+    let j = hi
+    for (;;) {
+      while (gaps[i] < pivot) i += 1
+      while (gaps[j] > pivot) j -= 1
+      if (i <= j) {
+        const swap = gaps[i]
+        gaps[i] = gaps[j]
+        gaps[j] = swap
+        i += 1
+        j -= 1
+      } else break
+    }
+    if (target <= j) hi = j
+    else lo = i
+  }
+  return gaps[target]
 }
 
 function inferredGapLimit(points: { t: number }[]): number {
@@ -87,8 +121,7 @@ function inferredGapLimit(points: { t: number }[]): number {
     const gap = points[i].t - points[i - 1].t
     if (gap > 0) gaps.push(gap)
   }
-  gaps.sort((a, b) => a - b)
-  const median = gaps[Math.floor(gaps.length / 2)] ?? 5 * 60 * 1000
+  const median = gaps.length > 0 ? selectMedian(gaps) : 5 * 60 * 1000
   return Math.max(median * 3, 10 * 60 * 1000)
 }
 
@@ -109,12 +142,20 @@ function formatTickDate(value: string): string {
   return value.slice(5)
 }
 
+function formatDayStamp(value: number): string {
+  return new Date(value).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'numeric' })
+}
+
 export function HeartRateChart({
   samples,
   sleepWindows = [],
+  multiDay = false,
+  title = 'BPM',
 }: {
   samples: HeartRateSample[]
   sleepWindows?: SleepWindow[]
+  multiDay?: boolean
+  title?: string
 }) {
   const colors = useChartColors()
   const data = memoOne(samples, () => {
@@ -145,9 +186,22 @@ export function HeartRateChart({
   const overlapping = sleepWindows.filter((band) => tMin != null && tMax != null && band.end > tMin && band.start < tMax)
   const bands = overlapping.length > 0 ? overlapping : sleepRangesFromSamples(data)
 
+  // In multi-day ranges the raw per-minute trace fades to a background band so the average stays readable; day boundaries replace the time ticks.
+  const dayTicks: number[] = []
+  if (multiDay && tMin != null && tMax != null) {
+    const day = 24 * 60 * 60 * 1000
+    const first = new Date(tMin)
+    first.setHours(0, 0, 0, 0)
+    for (let t = first.getTime(); t <= tMax; t += day) dayTicks.push(t)
+  }
+
+  const tickFormatter = multiDay
+    ? (value: number) => formatDayStamp(value)
+    : formatTickTime
+
   return (
     <section className="card chart-card">
-      <h2>BPM</h2>
+      <h2>{title}</h2>
       <p className="chart-legend">
         <span className="swatch sleep" /> Sleep
         <span className="swatch avg" /> Average
@@ -169,7 +223,8 @@ export function HeartRateChart({
               dataKey="t"
               type="number"
               domain={['dataMin', 'dataMax']}
-              tickFormatter={formatTickTime}
+              tickFormatter={tickFormatter}
+              ticks={multiDay ? dayTicks : undefined}
               stroke={colors.text}
               tick={{ fill: colors.text, fontSize: 12 }}
             />
@@ -184,20 +239,68 @@ export function HeartRateChart({
               content={({ active, payload, label }) => {
                 if (!active || !payload?.[0]) return null
                 const row = payload[0].payload as { sleeping?: boolean; bpm?: number | null; avg?: number | null }
-                if (row.bpm == null) return null
+                if (row.bpm == null && row.avg == null) return null
+                const stamp = multiDay ? formatDayStamp(Number(label)) : formatTickTime(Number(label))
                 return (
                   <div className="chart-tooltip">
-                    <div>{formatTickTime(Number(label))}</div>
-                    <div>
-                      {row.bpm} BPM{row.sleeping ? ' · sleep' : ''}
-                    </div>
-                    <div>Avg {row.avg}</div>
+                    <div>{stamp}</div>
+                    {row.bpm != null ? (
+                      <div>
+                        {row.bpm} BPM{row.sleeping ? ' · sleep' : ''}
+                      </div>
+                    ) : null}
+                    {row.avg != null ? <div>Avg {row.avg}</div> : null}
                   </div>
                 )
               }}
             />
-            <Line type="linear" dataKey="bpm" stroke={colors.line} dot={false} strokeWidth={1.25} connectNulls={false} isAnimationActive={false} />
+            <Line type="linear" dataKey="bpm" stroke={colors.line} strokeOpacity={multiDay ? 0.45 : 1} dot={false} strokeWidth={1.25} connectNulls={false} isAnimationActive={false} />
             <Line type="linear" dataKey="avg" stroke={colors.avgLine} dot={false} strokeWidth={2} connectNulls={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  )
+}
+
+export function HeartRateTrendChart({ days, title = 'Heart rate trend' }: { days: GarminDay[]; title?: string }) {
+  const colors = useChartColors()
+  const data = memoOne(days, () =>
+    days
+      .flatMap((day) =>
+        day.heartRate
+          ? [{ date: day.date, resting: day.heartRate.restingRate, min: day.heartRate.min, max: day.heartRate.max }]
+          : [],
+      )
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  )
+
+  if (data.length === 0) return null
+
+  return (
+    <section className="card chart-card">
+      <h2>{title}</h2>
+      <p className="chart-legend">
+        <span className="swatch" style={{ background: colors.line }} /> Resting
+        <span className="swatch" style={{ background: colors.deep }} /> Min
+        <span className="swatch awake" /> Max
+      </p>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={colors.grid} strokeDasharray="3 3" />
+            <XAxis dataKey="date" tickFormatter={formatTickDate} stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} />
+            <YAxis
+              domain={[(min: number) => Math.max(0, Math.floor(min - 4)), (max: number) => Math.ceil(max + 4)]}
+              allowDecimals={false}
+              stroke={colors.text}
+              tick={{ fill: colors.text, fontSize: 12 }}
+              width={40}
+            />
+            <Tooltip />
+            <Line type="monotone" dataKey="resting" name="Resting" stroke={colors.line} dot={{ r: 3 }} strokeWidth={2} />
+            <Line type="monotone" dataKey="min" name="Min" stroke={colors.deep} dot={{ r: 2 }} strokeWidth={1.5} />
+            <Line type="monotone" dataKey="max" name="Max" stroke={colors.awake} dot={{ r: 2 }} strokeWidth={1.5} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -251,8 +354,24 @@ export function SleepWeekChart({
             <XAxis dataKey="date" tickFormatter={formatTickDate} stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} />
             <YAxis unit="h" stroke={colors.text} tick={{ fill: colors.text, fontSize: 12 }} width={36} />
             <Tooltip
-              formatter={(value, name) => [`${Number(value ?? 0).toFixed(1)}h`, String(name)]}
-              labelFormatter={(label) => String(label)}
+              cursor={false}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null
+                const total = Number(payload[0]?.payload?.total ?? 0)
+                return (
+                  <div style={{ background: '#fff', border: '1px solid #ccc', borderRadius: 3, padding: 10, fontSize: 12, color: '#545454' }}>
+                    <div>{String(label)}</div>
+                    {payload.map((entry) => (
+                      <div key={String(entry.dataKey)} style={{ color: entry.color }}>
+                        {String(entry.name)} : {Number(entry.value ?? 0).toFixed(1)}h
+                      </div>
+                    ))}
+                    <div style={{ fontWeight: 600, color: '#545454', marginTop: 4 }}>
+                      Total : {total.toFixed(1)}h
+                    </div>
+                  </div>
+                )
+              }}
             />
             <Bar dataKey="deep" stackId="s" fill={colors.deep} name="Deep" cursor="pointer" />
             <Bar dataKey="light" stackId="s" fill={colors.light} name="Light" cursor="pointer" />
@@ -535,25 +654,25 @@ type ComparePoint = {
 }
 
 function buildCompareData(indoor: RoomClimateMeasurement[], outdoor: BuienradarMeasurement[]): ComparePoint[] {
-    const indoorPoints = maskEsp32Calibration(
-      indoor
-        .map((row) => ({
-          t: parseClimateTimestamp(row.timestamp).getTime(),
-          temperature: row.temperature,
-          humidity: row.humidity,
-          co2: row.cO2,
-        }))
-        .filter((row) => Number.isFinite(row.t))
-        .sort((a, b) => a.t - b.t),
-    )
-    const outdoorPoints = outdoor
+  const indoorPoints = maskEsp32Calibration(
+    indoor
       .map((row) => ({
-        t: new Date(row.timestamp).getTime(),
+        t: parseClimateTimestamp(row.timestamp).getTime(),
         temperature: row.temperature,
         humidity: row.humidity,
+        co2: row.cO2,
       }))
       .filter((row) => Number.isFinite(row.t))
-      .sort((a, b) => a.t - b.t)
+      .sort((a, b) => a.t - b.t),
+  )
+  const outdoorPoints = outdoor
+    .map((row) => ({
+      t: new Date(row.timestamp).getTime(),
+      temperature: row.temperature,
+      humidity: row.humidity,
+    }))
+    .filter((row) => Number.isFinite(row.t))
+    .sort((a, b) => a.t - b.t)
 
   const times = [...new Set([...indoorPoints.map((row) => row.t), ...outdoorPoints.map((row) => row.t)])].sort((a, b) => a - b)
   const indoorTemp = seriesSamples(indoorPoints, 'temperature')

@@ -3,11 +3,11 @@ import {useNavigate, useSearchParams} from 'react-router-dom'
 import {getGarminDays} from '../api/garmin.ts'
 import {ApiError} from '../api/client.ts'
 import {useAuth} from '../auth/AuthProvider.tsx'
-import {SleepWeekChart} from '../charts.tsx'
+import {HeartRateChart, HeartRateTrendChart, SleepWeekChart, type SleepWindow} from '../charts.tsx'
 import {cacheKeys, cachedSlice, hasCache, loadCache, readCache, refreshScopes} from '../dataCache.ts'
 import {publishGarminDays} from '../garminCache.ts'
 import {DatePicker} from '../DatePicker.tsx'
-import {formatSeconds, todayLocal} from '../dates.ts'
+import {addDays, addMonths, fromIsoDate, formatSeconds, isoWeek} from '../dates.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
 import {liveMinuteMs, liveSlowMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {
@@ -103,6 +103,36 @@ export function HomePage() {
     : null
   const awakeInaccurate = awakeSeconds != null && awakeSeconds > AWAKE_INACCURATE_SECONDS
 
+  const heartDates = range === 'month' ? [] : dates
+  const heartSamples = cachedSlice(days, `home-heart-samples:${range}:${requestedDate}`, () =>
+    days.flatMap((day) => (heartDates.includes(day.date) ? day.heartRate?.samples ?? [] : [])),
+  )
+  const heartSleepWindows = cachedSlice(days, `home-heart-windows:${range}:${requestedDate}`, () => {
+    const sleepDates = new Set<string>()
+    for (const iso of heartDates) {
+      sleepDates.add(iso)
+      sleepDates.add(addDays(iso, 1))
+    }
+    return [...sleepDates].flatMap((iso): SleepWindow[] => {
+      const sleep = days.find((day) => day.date === iso)?.sleep
+      const window = sleep ? sleepWindowFromSleep(sleep) : null
+      return window ? [window] : []
+    })
+  })
+  const heartRateTrendDays = cachedSlice(days, `home-heart-trend:${range}:${requestedDate}`, () =>
+    days.filter((day) => dates.includes(day.date) && day.heartRate),
+  )
+
+  const sleepTitle =
+    range === 'month'
+      ? `Sleep for ${fromIsoDate(requestedDate).toLocaleString(undefined, { month: 'long', year: 'numeric' })}`
+      : `Sleep for Week ${isoWeek(requestedDate)}`
+
+  function stepDate(direction: -1 | 1): string {
+    if (range === 'month') return addMonths(requestedDate, direction)
+    return addDays(requestedDate, direction * (range === 'week' ? 7 : 1))
+  }
+
   function setRange(next: Range) {
     const nextParams = new URLSearchParams(searchParams)
     nextParams.set('range', next)
@@ -124,7 +154,20 @@ export function HomePage() {
       <form className="toolbar" onSubmit={onSubmit}>
         <label>
           Date
-          <DatePicker value={date} onChange={requestDate} />
+          <div className="date-stepper">
+            <button
+              type="button"
+              className="step-btn"
+              onClick={() => requestDate(stepDate(-1))}
+              aria-label="Previous"
+            >
+              ‹
+            </button>
+            <DatePicker value={date} onChange={requestDate} />
+            <button type="button" className="step-btn" onClick={() => requestDate(stepDate(1))} aria-label="Next">
+              ›
+            </button>
+          </div>
         </label>
         <div className="toolbar-actions">
           <TodayButton date={requestedDate} onToday={requestDate} />
@@ -200,12 +243,25 @@ export function HomePage() {
         </p>
       </section>
 
+      {heartSamples.length > 0 ? (
+        <HeartRateChart
+          samples={heartSamples}
+          sleepWindows={heartSleepWindows}
+          multiDay={range === 'week'}
+          title={range === 'week' ? 'BPM this week' : 'BPM'}
+        />
+      ) : null}
+
+      {range === 'month' ? (
+        <HeartRateTrendChart days={heartRateTrendDays} title="Heart rate month" />
+      ) : null}
+
       {range !== 'day' ? (
         <SleepWeekChart
-          title={range === 'month' ? 'Sleep month' : 'Sleep week'}
+          title={sleepTitle}
           nights={overviewNights}
           selected={requestedDate}
-          onSelect={requestDate}
+          onSelect={(iso) => navigate(`/sleep?date=${iso}`)}
         />
       ) : null}
     </main>
