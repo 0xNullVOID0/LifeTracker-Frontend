@@ -1,75 +1,45 @@
-# React + TypeScript + Vite
+# LifeTracker — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The web frontend for [LifeTracker](../LifeTracker). It shows your personal data — sleep, heart rate, stress, activity, receipts(WIP), indoor climate, weather, and activity-watch(Demo disabled) time-in-front-of-screens — as charts and day/week/month views you can step through.
 
-Currently, two official plugins are available:
+Built with React 19 + TypeScript, bundled by Vite. Routing via react-router, charts with Recharts, date picking with react-day-picker.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## How it talks to the API
 
-## React Compiler
+All data comes from the LifeTracker backend (ASP.NET) over `/api/...` (plus `/azure-api/...` for a couple of Azure Functions endpoints). The frontend is same-origin by design — the backend serves the built frontend directly, so no CORS is involved.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Dev:** the Vite dev server proxies `/api` → `http://127.0.0.1:5071` and `/azure-api` → the Azure Functions app (see `vite.config.ts`).
+- **Prod:** run `npm run build` and serve `dist/` from the backend's `wwwroot`.
 
-## Expanding the ESLint configuration
+You can override the API origin with `VITE_API_BASE`, but note the backend has no CORS policy, so that only works same-origin or through a proxy.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Login is password-based (a JWT is kept in `sessionStorage`); the dev backend accepts the password `demo`.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Make sure the backend is running (default: `http://127.0.0.1:5071`).
+2. `npm install`
+3. `npm run dev` → open `http://localhost:5173`, log in.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Commands
 
-```
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Vite dev server with HMR + API proxying |
+| `npm run build` | Type-check (`tsc -b`) then produce the production bundle in `dist/` |
+| `npm run lint` | ESLint over the whole project |
+| `npm run preview` | Serve the built `dist/` locally |
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Layout
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `src/pages/` — one component per route (`/home`, `/day`, `/sleep`, `/heartrate`, `/stress`, `/climate`, `/weather`, `/inside-outside`, `/receipt`)
+- `src/charts.tsx` — all Recharts chart components
+- `src/api/` — typed fetch wrappers around the backend
+- `src/dates.ts`, `src/range.ts`, `src/useRange.ts` — date/range helpers (ISO dates, week/month stepping)
+- `src/dataCache.ts`, `src/garminCache.ts` — localStorage caching with background live refresh
+- `src/auth/` — JWT login/session handling
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Notes
 
-```
+- Pages read their selected date from the URL (`?date=`), so any view is directly linkable. Future dates are clamped to today everywhere (picker, route param, and stepper).
+- The home page shows a live-updating view of the current day/week/month with heart rate and sleep charts; clicking a day in a chart jumps to that day's detail page.

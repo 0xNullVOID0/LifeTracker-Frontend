@@ -75,7 +75,7 @@ export function ReceiptPage() {
         </button>
       </header>
 
-      <p className="lede">Upload a photo of a receipt to scan the items and get their nutrition info</p>
+      <p className="lede">Upload a photo of a grocery receipt to scan the items and get their nutrition info(WIP backend not fully wired yet)</p>
       <p className="lede">For demo purposes this function is rate limited</p> 
 {/* TODO proper rate limit and info */}
 

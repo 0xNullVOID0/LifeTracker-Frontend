@@ -4,7 +4,6 @@ import {loginHref} from './returnPath.ts'
 import {HomePage} from './pages/HomePage.tsx'
 import {WeatherPage} from './pages/WeatherPage.tsx'
 import {ClimatePage} from './pages/ClimatePage.tsx'
-import {DayPage} from './pages/DayPage.tsx'
 import {HeartRatePage} from './pages/HeartRatePage.tsx'
 import {InsideOutsidePage} from './pages/InsideOutsidePage.tsx'
 import {LoginPage} from './pages/LoginPage.tsx'
@@ -29,14 +28,6 @@ export default function App() {
             element={
               <RequireAuth>
                 <HomePage />
-              </RequireAuth>
-            }
-        />
-        <Route
-            path="/day"
-            element={
-              <RequireAuth>
-                <DayPage />
               </RequireAuth>
             }
         />
@@ -96,7 +87,7 @@ export default function App() {
               </RequireAuth>
             }
         />
-        <Route path="*" element={<Navigate to="/day" replace />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
   )
 }

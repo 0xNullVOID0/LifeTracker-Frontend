@@ -63,12 +63,12 @@ export function StoredWeeks({days, selectedDate, onSelectDate, onSelectWeek}: St
                   ) : null}
                   {day.stress ? (
                     <Link className="stored-day-flag" title="Stress" to={`/stress${dateQuery(day.date)}`}>
-                      ST
+                      STR
                     </Link>
                   ) : null}
                   {day.sleep ? (
                     <Link className="stored-day-flag" title="Sleep" to={`/sleep${dateQuery(day.date)}`}>
-                      SL
+                      SLP
                     </Link>
                   ) : null}
                 </div>

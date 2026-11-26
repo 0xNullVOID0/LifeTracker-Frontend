@@ -9,7 +9,6 @@ export function GarminNav() {
   return (
     <nav className="nav">
       <NavLink to={`/home${q}`}>Home</NavLink>
-      <NavLink to={`/day${q}`}>Day</NavLink>
       <NavLink to={`/heartrate${q}`}>Heart rate</NavLink>
       <NavLink to={`/stress${q}`}>Stress</NavLink>
       <NavLink to={`/sleep${q}`}>Sleep</NavLink>
