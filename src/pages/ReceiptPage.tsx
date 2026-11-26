@@ -130,7 +130,7 @@ export function ReceiptPage() {
     <main className="page wide">
       <header className="topbar">
         <div>
-          <h1>Receipt</h1>
+          <h1>Receipt (WIP)</h1>
           <GarminNav />
         </div>
         <button type="button" className="ghost" onClick={logout}>
@@ -138,8 +138,7 @@ export function ReceiptPage() {
         </button>
       </header>
 
-      <p className="lede">Upload a photo of a grocery receipt to scan the items and get their nutrition info</p>
-      <p className="lede">For demo purposes this function is rate limited</p>
+      <p className="lede">Upload a photo of a grocery receipt to scan the items and get their nutrition info <strong>(for demo purposes this function is rate limited)</strong></p>
  {/* TODO proper rate limit and info */}
 
       <div className="card receipt-upload">
@@ -150,6 +149,18 @@ export function ReceiptPage() {
           <button type="button" onClick={onScan} disabled={!file || scanning}>
             {scanning ? 'Scanning…' : 'Scan receipt'}
           </button>
+          {preview ? (
+            <button type="button" className="ghost" onClick={() => setImageOpen((open) => !open)}>
+              {imageOpen ? 'Hide image' : 'Show image'}
+            </button>
+          ) : null}
+          {preview && imageOpen ? (
+            <div className="receipt-preview-zoom-controls">
+              <button type="button" className="ghost" onClick={() => changeZoom(-0.25)} disabled={zoom <= 0.5} aria-label="Zoom out">−</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button type="button" className="ghost" onClick={() => changeZoom(0.25)} disabled={zoom >= 4} aria-label="Zoom in">+</button>
+            </div>
+          ) : null}
         </div>
         <input
           ref={fileInputRef}
@@ -160,21 +171,9 @@ export function ReceiptPage() {
         />
         {preview ? (
           <div className="receipt-preview-wrap">
-            <div className="receipt-preview-zoom">
-              <button type="button" className="ghost" onClick={() => setImageOpen((open) => !open)}>
-                {imageOpen ? 'Hide image' : 'Show image'}
-              </button>
-              {imageOpen ? (
-                <div className="receipt-preview-zoom-controls">
-                  <button type="button" className="ghost" onClick={() => changeZoom(-0.25)} disabled={zoom <= 0.5} aria-label="Zoom out">−</button>
-                  <span>{Math.round(zoom * 100)}%</span>
-                  <button type="button" className="ghost" onClick={() => changeZoom(0.25)} disabled={zoom >= 4} aria-label="Zoom in">+</button>
-                </div>
-              ) : null}
-            </div>
             {imageOpen ? (
               <div className="receipt-preview-scroll">
-                <img className="receipt-preview" style={{transform: `scale(${zoom})`}} src={preview} alt="Receipt preview" />
+                <img className="receipt-preview" style={{maxHeight: `${60 * zoom}vh`}} src={preview} alt="Receipt preview" />
               </div>
             ) : null}
           </div>

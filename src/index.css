@@ -706,22 +706,15 @@ button.ghost {
   gap: 0.5rem;
 }
 
-.receipt-preview-zoom {
+.receipt-preview-zoom-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   font-size: 0.85rem;
   color: var(--text);
 }
 
-.receipt-preview-zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.receipt-preview-zoom button {
+.receipt-preview-zoom-controls button {
   padding: 0.15rem 0.6rem;
 }
 
@@ -781,18 +774,16 @@ button.ghost {
 
 .receipt-preview-scroll {
   overflow: auto;
-  max-height: 75vh;
+  align-self: center;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
 }
 
 .receipt-preview {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
-  max-height: 75vh;
-  object-fit: contain;
-  transform-origin: top center;
   border-radius: 6px;
 }
 
