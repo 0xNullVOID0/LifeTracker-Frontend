@@ -730,3 +730,108 @@ button.ghost {
   min-width: 100%;
   border-radius: 6px;
 }
+
+.receipt-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.receipt-item + .receipt-item {
+  margin-top: 0.75rem;
+}
+
+.receipt-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+}
+
+.receipt-item-head strong {
+  color: var(--text-h);
+}
+
+.receipt-item-raw {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.receipt-item-meta {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.receipt-item-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.receipt-macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text-h);
+}
+
+.receipt-macros span {
+  white-space: nowrap;
+}
+
+.receipt-details summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.receipt-nutrients {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.receipt-nutrients th,
+.receipt-nutrients td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.receipt-nutrients td {
+  font-family: var(--mono);
+  color: var(--text-h);
+}
+
+.receipt-skipped {
+  margin-top: 1rem;
+}
+
+.receipt-skipped h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-h);
+}
+
+.receipt-skipped ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.receipt-skip-reason {
+  color: var(--text);
+  font-style: italic;
+}
