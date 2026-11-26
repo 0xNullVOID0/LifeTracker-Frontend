@@ -40,8 +40,11 @@ export function ReceiptPage() {
   const { logout } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [notice, setNotice] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [imageOpen, setImageOpen] = useState(true)
   const [result, setResult] = useState<EnrichedReceiptResponse | null>(null)
   const [zoom, setZoom] = useState(1)
   // raw_text -> candidate index the user picked for that line
@@ -55,14 +58,30 @@ export function ReceiptPage() {
     }
   }, [])
 
+  // tick a clock while a scan is in flight so the progress bar shows real elapsed time
+  useEffect(() => {
+    if (!scanning) return
+    const started = Date.now()
+    const timer = setInterval(() => setElapsed((Date.now() - started) / 1000), 200)
+    return () => clearInterval(timer)
+  }, [scanning])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = setTimeout(() => setNotice(null), 6000)
+    return () => clearTimeout(timer)
+  }, [notice])
+
   function onFileSelected(event: ChangeEvent<HTMLInputElement>) {
     const chosen = event.target.files?.[0]
     event.target.value = ''
     if (!chosen) return
     setError(null)
+    setNotice(null)
     setResult(null)
     setMatches({})
     setZoom(1)
+    setImageOpen(true)
     if (previewRef.current) URL.revokeObjectURL(previewRef.current)
     const url = URL.createObjectURL(chosen)
     previewRef.current = url
@@ -77,13 +96,18 @@ export function ReceiptPage() {
   async function onScan() {
     if (!file) return
     setScanning(true)
+    setElapsed(0)
     setError(null)
+    setNotice(null)
     try {
       const image = await prepareReceiptImage(file)
       const scanned = await scanReceiptNutrition(image)
       if (scanned) {
         setResult(scanned)
         setMatches({})
+        setImageOpen(false)
+        const count = scanned.items.length
+        setNotice(`Scan complete — ${count} ${count === 1 ? 'item' : 'items'} recognized.`)
       }
       else setError('The scan returned no receipt data.')
     } catch (caught) {
@@ -96,6 +120,11 @@ export function ReceiptPage() {
 
   const receipt = result?.receipt ?? null
 
+  const progressLabel = elapsed < 3
+    ? 'Preparing the image…'
+    : elapsed < 12
+      ? 'Scanning the receipt…'
+      : 'Matching items to the food database…'
 
   return (
     <main className="page wide">
@@ -132,15 +161,36 @@ export function ReceiptPage() {
         {preview ? (
           <div className="receipt-preview-wrap">
             <div className="receipt-preview-zoom">
-              <button type="button" className="ghost" onClick={() => changeZoom(-0.25)} disabled={zoom <= 0.5} aria-label="Zoom out">−</button>
-              <span>{Math.round(zoom * 100)}%</span>
-              <button type="button" className="ghost" onClick={() => changeZoom(0.25)} disabled={zoom >= 4} aria-label="Zoom in">+</button>
+              <button type="button" className="ghost" onClick={() => setImageOpen((open) => !open)}>
+                {imageOpen ? 'Hide image' : 'Show image'}
+              </button>
+              {imageOpen ? (
+                <div className="receipt-preview-zoom-controls">
+                  <button type="button" className="ghost" onClick={() => changeZoom(-0.25)} disabled={zoom <= 0.5} aria-label="Zoom out">−</button>
+                  <span>{Math.round(zoom * 100)}%</span>
+                  <button type="button" className="ghost" onClick={() => changeZoom(0.25)} disabled={zoom >= 4} aria-label="Zoom in">+</button>
+                </div>
+              ) : null}
             </div>
-            <div className="receipt-preview-scroll">
-              <img className="receipt-preview" style={{width: `${zoom * 100}%`}} src={preview} alt="Receipt preview" />
-            </div>
+            {imageOpen ? (
+              <div className="receipt-preview-scroll">
+                <img className="receipt-preview" style={{transform: `scale(${zoom})`}} src={preview} alt="Receipt preview" />
+              </div>
+            ) : null}
           </div>
         ) : <p className="empty">No receipt attached.</p>}
+        {scanning ? (
+          <div className="receipt-progress" role="status" aria-live="polite">
+            <div className="receipt-progress-track">
+              <div className="receipt-progress-fill" />
+            </div>
+            <p className="receipt-progress-label">
+              {progressLabel}
+              <span className="receipt-progress-elapsed">{elapsed.toFixed(1)}s</span>
+            </p>
+          </div>
+        ) : null}
+        {notice ? <p className="receipt-notice" role="status">{notice}</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </div>
 
