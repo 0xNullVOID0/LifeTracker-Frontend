@@ -787,6 +787,27 @@ button.ghost {
   border-radius: 6px;
 }
 
+.receipt-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.receipt-section-head h2 {
+  margin: 0;
+}
+
+.receipt-export {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.receipt-export select {
+  padding: 0.3rem 0.5rem;
+}
+
 .receipt-item {
   border: 1px solid var(--border);
   border-radius: 6px;

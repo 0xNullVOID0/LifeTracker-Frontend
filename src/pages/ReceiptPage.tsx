@@ -36,6 +36,133 @@ function findMacro(nutrients: FoodNutrients | null, name: string): ReceiptNutrie
     ?? nutrients?.nutrients.find((n) => n.name.toLowerCase().startsWith(`${name},`))
 }
 
+function csvCell(value: string | number | null | undefined): string {
+  if (value == null) return ''
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function buildReceiptCsv(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
+  const header = [
+    'raw_text', 'name', 'brand', 'quantity', 'weight_grams', 'price',
+    'matched_food', 'matched_source', 'matched_query',
+    'energy_kcal_per_100g', 'protein_g_per_100g', 'fat_g_per_100g', 'carbs_g_per_100g', 'fiber_g_per_100g',
+  ]
+  const rows = exportRows(result, matches)
+  return [header, ...rows.map((r) => [
+    r.raw_text, r.name, r.brand, r.quantity, r.weight_grams, r.price,
+    r.matched_food, r.matched_source, r.matched_query,
+    r.energy, r.protein, r.fat, r.carbs, r.fiber,
+  ])]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\r\n')
+}
+
+type ExportRow = {
+  raw_text: string
+  name: string
+  brand: string | null
+  quantity: number | null
+  weight_grams: number | null
+  price: number | null
+  matched_food: string | null
+  matched_source: string | null
+  matched_query: string | null
+  energy: number | null
+  protein: number | null
+  fat: number | null
+  carbs: number | null
+  fiber: number | null
+}
+
+// one flat record per receipt line, with the candidate the user picked
+function exportRows(result: EnrichedReceiptResponse, matches: Record<string, number>): ExportRow[] {
+  return result.items.map((item) => {
+    const candidate = item.candidates[matches[item.raw_text] ?? 0]
+    const nutrients = candidate?.nutrients ?? null
+    const macro = (name: string) => findMacro(nutrients, name)?.amount ?? null
+    return {
+      raw_text: item.raw_text,
+      name: item.name,
+      brand: item.brand ?? null,
+      quantity: item.quantity ?? null,
+      weight_grams: item.weight_grams ?? null,
+      price: item.price ?? null,
+      matched_food: candidate?.name ?? null,
+      matched_source: candidate?.source ?? null,
+      matched_query: candidate?.query ?? null,
+      energy: macro('energy'),
+      protein: macro('protein'),
+      fat: macro('fat'),
+      carbs: macro('carbohydrate'),
+      fiber: macro('fiber'),
+    }
+  })
+}
+
+function buildReceiptJson(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
+  return JSON.stringify({receipt: result.receipt, items: exportRows(result, matches), skipped: result.skipped}, null, 2)
+}
+
+// a markdown table cell must stay on one line: collapse all whitespace
+// (receipt lines often wrap, e.g. "Po o Romano DOP\n 'TING 25%") and escape pipes
+function mdCell(value: string | null | undefined): string {
+  if (value == null || value === '') return '—'
+  return value.replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|')
+}
+
+function buildReceiptMarkdown(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
+  const r = result.receipt
+  const lines: string[] = ['# Receipt scan']
+  if (r) {
+    lines.push('', `- **Store:** ${mdCell(r.store)}${r.location ? `, ${mdCell(r.location)}` : ''}`)
+    lines.push(`- **Purchased:** ${mdCell(r.purchased_at)}${r.timestamp_is_guess ? ' (guessed)' : ''}`)
+    lines.push(`- **Total:** ${r.total ?? '—'}${r.currency ? ` ${r.currency}` : ''}`)
+  }
+  lines.push('', '## Items', '', '| Receipt line | Matched food | Energy | Protein | Fat | Carbs | Fiber |', '|---|---|---|---|---|---|---|')
+  for (const row of exportRows(result, matches)) {
+    const cell = (v: number | null) => (v == null ? '—' : String(Number(v.toFixed(2))))
+    const food = row.matched_food ? `${row.matched_food}${row.matched_source ? ` (${row.matched_source})` : ''}` : null
+    lines.push(`| ${mdCell(row.raw_text)} | ${mdCell(food)} | ${cell(row.energy)} | ${cell(row.protein)} | ${cell(row.fat)} | ${cell(row.carbs)} | ${cell(row.fiber)} |`)
+  }
+  lines.push('', '_Macros are per 100 g._')
+  if (result.skipped.length) {
+    lines.push('', '## Skipped', '')
+    for (const s of result.skipped) lines.push(`- ${mdCell(s.raw_text || s.name)} — ${mdCell(s.reason)}`)
+  }
+  return lines.join('\n') + '\n'
+}
+
+function buildReceiptText(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
+  const r = result.receipt
+  const lines: string[] = ['RECEIPT SCAN', '']
+  if (r) {
+    lines.push(`Store: ${r.store ?? '-'}${r.location ? `, ${r.location}` : ''}`)
+    lines.push(`Purchased: ${r.purchased_at ?? '-'}${r.timestamp_is_guess ? ' (guessed)' : ''}`)
+    lines.push(`Total: ${r.total ?? '-'}${r.currency ? ` ${r.currency}` : ''}`, '')
+  }
+  for (const row of exportRows(result, matches)) {
+    const cell = (v: number | null) => (v == null ? '-' : String(Number(v.toFixed(2))))
+    lines.push(`* ${row.raw_text}`)
+    lines.push(`    matched: ${row.matched_food ?? '-'}${row.matched_source ? ` (${row.matched_source})` : ''}`)
+    lines.push(`    per 100 g: energy ${cell(row.energy)} kcal, protein ${cell(row.protein)} g, fat ${cell(row.fat)} g, carbs ${cell(row.carbs)} g, fiber ${cell(row.fiber)} g`)
+  }
+  if (result.skipped.length) {
+    lines.push('', 'SKIPPED')
+    for (const s of result.skipped) lines.push(`* ${s.raw_text || s.name} - ${s.reason}`)
+  }
+  return lines.join('\n') + '\n'
+}
+
+const EXPORT_FORMATS = {
+  md: {label: '.MD', ext: 'md', mime: 'text/markdown;charset=utf-8', build: buildReceiptMarkdown},
+  json: {label: 'JSON', ext: 'json', mime: 'application/json;charset=utf-8', build: buildReceiptJson},
+  txt: {label: '.TXT', ext: 'txt', mime: 'text/plain;charset=utf-8', build: buildReceiptText},
+  csv: {label: 'CSV', ext: 'csv', mime: 'text/csv;charset=utf-8', build: buildReceiptCsv},
+} as const
+
+type ExportFormat = keyof typeof EXPORT_FORMATS
+
 export function ReceiptPage() {
   const { logout } = useAuth()
   const [error, setError] = useState<string | null>(null)
@@ -47,6 +174,7 @@ export function ReceiptPage() {
   const [imageOpen, setImageOpen] = useState(true)
   const [result, setResult] = useState<EnrichedReceiptResponse | null>(null)
   const [zoom, setZoom] = useState(1)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('md')
   // raw_text -> candidate index the user picked for that line
   const [matches, setMatches] = useState<Record<string, number>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -120,6 +248,21 @@ export function ReceiptPage() {
 
   const receipt = result?.receipt ?? null
 
+  function onExport() {
+    if (!result) return
+    const format = EXPORT_FORMATS[exportFormat]
+    const content = format.build(result, matches)
+    const body = exportFormat === 'csv' ? ['\ufeff', content] : [content]
+    const blob = new Blob(body, {type: format.mime})
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const stamp = new Date().toISOString().slice(0, 10)
+    link.href = url
+    link.download = `receipt-${receipt?.store ?? 'scan'}-${stamp}.${format.ext}`.replace(/\s+/g, '-').toLowerCase()
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   const progressLabel = elapsed < 3
     ? 'Preparing the image…'
     : elapsed < 12
@@ -138,7 +281,7 @@ export function ReceiptPage() {
         </button>
       </header>
 
-      <p className="lede">Upload a photo of a grocery receipt to scan the items and get their nutrition info <strong>(for demo purposes this function is rate limited)</strong></p>
+      <p className="lede">Upload a photo of a grocery receipt to scan the items and get their nutrition info on a micro level if available(NCCDB)<br></br><strong> (results may be inaccurate and for demo purposes this function is rate limited)</strong></p>
  {/* TODO proper rate limit and info */}
 
       <div className="card receipt-upload">
@@ -223,7 +366,25 @@ export function ReceiptPage() {
           ) : null}
 
           <section className="card">
-            <h2>Items</h2>
+            <div className="receipt-section-head">
+              <h2>Items</h2>
+              {result.items.length ? (
+                <div className="receipt-export">
+                  <select
+                    aria-label="Export format"
+                    value={exportFormat}
+                    onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                  >
+                    {(Object.keys(EXPORT_FORMATS) as ExportFormat[]).map((key) => (
+                      <option key={key} value={key}>{EXPORT_FORMATS[key].label}</option>
+                    ))}
+                  </select>
+                  <button type="button" className="ghost" onClick={onExport}>
+                    Export
+                  </button>
+                </div>
+              ) : null}
+            </div>
             {result.items.length === 0 ? <p className="empty">No items were recognized.</p> : null}
             {result.items.map((item) => (
               <ReceiptItemCard
