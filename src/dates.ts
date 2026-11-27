@@ -104,52 +104,21 @@ export function toIsoDateInZone(value: Date, timeZone = appTimeZone): string {
     day: '2-digit',
   }).format(value)
 }
+// TODO update ESP32 and remove this after
+// quick bandaid fix for ESP32 firmware stuck on summer time
+const sensorUtcOffsetMinutes = 120
 
 export function parseClimateTimestamp(iso: string): Date {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(iso)
   if (!match) return new Date(iso)
-  return wallTimeInZone(
-    appTimeZone,
+  const wallClock = Date.UTC(
     Number(match[1]),
-    Number(match[2]),
+    Number(match[2]) - 1,
     Number(match[3]),
     Number(match[4]),
     Number(match[5]),
     Number(match[6]),
   )
+  return new Date(wallClock - sensorUtcOffsetMinutes * 60_000)
 }
 
-function wallTimeInZone(
-  timeZone: string,
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute: number,
-  second: number,
-): Date {
-  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second)
-  const offset = zoneOffsetMs(timeZone, new Date(utcGuess))
-  const instant = new Date(utcGuess - offset)
-  const offsetAfter = zoneOffsetMs(timeZone, instant)
-  if (offsetAfter !== offset) return new Date(utcGuess - offsetAfter)
-  return instant
-}
-
-function zoneOffsetMs(timeZone: string, date: Date): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour12: false,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(date)
-  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value)
-  const hour = read('hour') === 24 ? 0 : read('hour')
-  const asUtc = Date.UTC(read('year'), read('month') - 1, read('day'), hour, read('minute'), read('second'))
-  return asUtc - date.getTime()
-}

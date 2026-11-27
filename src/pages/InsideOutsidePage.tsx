@@ -10,7 +10,7 @@ import {addDays} from '../dates.ts'
 import type {BuienradarMeasurement} from '../types/buienradar.ts'
 import type {RoomClimateMeasurement} from '../types/climate.ts'
 import {TodayButton, UpdateNowButton} from '../RefreshButtons.tsx'
-import {buienradarDay} from '../seriesCache.ts'
+import {buienradarDay, climateDay} from '../seriesCache.ts'
 import {useDateState} from '../useDateState.ts'
 import {liveMinuteMs, useLiveRefresh} from '../useLiveRefresh.ts'
 import {useRequestedDate} from '../useRequestedDate.ts'
@@ -71,7 +71,7 @@ export function InsideOutsidePage() {
     },
   )
 
-  const indoorDay = indoor
+  const indoorDay = climateDay(indoor, requestedDate)
   const outdoorDay = buienradarDay(outdoor, requestedDate)
 
   const latestIndoor = indoorDay.length > 0 ? newestIndoor(indoorDay) : null
