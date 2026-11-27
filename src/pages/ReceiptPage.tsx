@@ -42,21 +42,7 @@ function csvCell(value: string | number | null | undefined): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
-function buildReceiptCsv(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
-  const header = [
-    'raw_text', 'name', 'brand', 'quantity', 'weight_grams', 'price',
-    'matched_food', 'matched_source', 'matched_query',
-    'energy_kcal_per_100g', 'protein_g_per_100g', 'fat_g_per_100g', 'carbs_g_per_100g', 'fiber_g_per_100g',
-  ]
-  const rows = exportRows(result, matches)
-  return [header, ...rows.map((r) => [
-    r.raw_text, r.name, r.brand, r.quantity, r.weight_grams, r.price,
-    r.matched_food, r.matched_source, r.matched_query,
-    r.energy, r.protein, r.fat, r.carbs, r.fiber,
-  ])]
-    .map((row) => row.map(csvCell).join(','))
-    .join('\r\n')
-}
+type ExportNutrient = {name: string; unit: string; amount: number}
 
 type ExportRow = {
   raw_text: string
@@ -68,11 +54,18 @@ type ExportRow = {
   matched_food: string | null
   matched_source: string | null
   matched_query: string | null
+  basis_grams: number
   energy: number | null
   protein: number | null
   fat: number | null
   carbs: number | null
   fiber: number | null
+  // full per-100 g nutrient list, normalized when the basis is not 100 g
+  nutrients: ExportNutrient[]
+}
+
+function round2(value: number): number {
+  return Number(value.toFixed(2))
 }
 
 // one flat record per receipt line, with the candidate the user picked
@@ -80,7 +73,13 @@ function exportRows(result: EnrichedReceiptResponse, matches: Record<string, num
   return result.items.map((item) => {
     const candidate = item.candidates[matches[item.raw_text] ?? 0]
     const nutrients = candidate?.nutrients ?? null
-    const macro = (name: string) => findMacro(nutrients, name)?.amount ?? null
+    const basis = nutrients?.basis?.weight_grams ?? 100
+    // the payload is per `basis` grams; scale to a true per-100 g column
+    const to100 = (amount: number) => round2(basis === 100 ? amount : amount * (100 / basis))
+    const macro = (name: string) => {
+      const entry = findMacro(nutrients, name)
+      return entry ? to100(entry.amount) : null
+    }
     return {
       raw_text: item.raw_text,
       name: item.name,
@@ -91,13 +90,53 @@ function exportRows(result: EnrichedReceiptResponse, matches: Record<string, num
       matched_food: candidate?.name ?? null,
       matched_source: candidate?.source ?? null,
       matched_query: candidate?.query ?? null,
+      basis_grams: 100,
       energy: macro('energy'),
       protein: macro('protein'),
       fat: macro('fat'),
       carbs: macro('carbohydrate'),
       fiber: macro('fiber'),
+      nutrients: (nutrients?.nutrients ?? []).map((n) => ({name: n.name, unit: n.unit, amount: to100(n.amount)})),
     }
   })
+}
+
+// union of nutrient names across all rows, keeping first-seen order and unit
+function nutrientColumns(rows: ExportRow[]): {name: string; unit: string}[] {
+  const columns: {name: string; unit: string}[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    for (const nutrient of row.nutrients) {
+      const key = nutrient.name.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      columns.push({name: nutrient.name, unit: nutrient.unit})
+    }
+  }
+  return columns
+}
+
+function buildReceiptCsv(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
+  const rows = exportRows(result, matches)
+  const columns = nutrientColumns(rows)
+  const header = [
+    'raw_text', 'name', 'brand', 'quantity', 'weight_grams', 'price',
+    'matched_food', 'matched_source', 'matched_query',
+    'energy_kcal_per_100g', 'protein_g_per_100g', 'fat_g_per_100g', 'carbs_g_per_100g', 'fiber_g_per_100g',
+    ...columns.map((c) => `${c.name}${c.unit ? ` (${c.unit})` : ''} per_100g`),
+  ]
+  const body = rows.map((row) => {
+    const byName = new Map(row.nutrients.map((n) => [n.name.toLowerCase(), n.amount]))
+    return [
+      row.raw_text, row.name, row.brand, row.quantity, row.weight_grams, row.price,
+      row.matched_food, row.matched_source, row.matched_query,
+      row.energy, row.protein, row.fat, row.carbs, row.fiber,
+      ...columns.map((c) => byName.get(c.name.toLowerCase()) ?? null),
+    ]
+  })
+  return [header, ...body]
+    .map((line) => line.map(csvCell).join(','))
+    .join('\r\n')
 }
 
 function buildReceiptJson(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
@@ -111,8 +150,14 @@ function mdCell(value: string | null | undefined): string {
   return value.replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|')
 }
 
+function formatNutrient(name: string, amount: number, unit: string): string {
+  const digits = Math.abs(amount) >= 100 ? 0 : 2
+  return `${name}: ${Number(amount.toFixed(digits))}${unit ? ` ${unit}` : ''}`
+}
+
 function buildReceiptMarkdown(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
   const r = result.receipt
+  const rows = exportRows(result, matches)
   const lines: string[] = ['# Receipt scan']
   if (r) {
     lines.push('', `- **Store:** ${mdCell(r.store)}${r.location ? `, ${mdCell(r.location)}` : ''}`)
@@ -120,36 +165,65 @@ function buildReceiptMarkdown(result: EnrichedReceiptResponse, matches: Record<s
     lines.push(`- **Total:** ${r.total ?? '—'}${r.currency ? ` ${r.currency}` : ''}`)
   }
   lines.push('', '## Items', '', '| Receipt line | Matched food | Energy | Protein | Fat | Carbs | Fiber |', '|---|---|---|---|---|---|---|')
-  for (const row of exportRows(result, matches)) {
-    const cell = (v: number | null) => (v == null ? '—' : String(Number(v.toFixed(2))))
+  for (const row of rows) {
+    const cell = (v: number | null) => (v == null ? '—' : String(v))
     const food = row.matched_food ? `${row.matched_food}${row.matched_source ? ` (${row.matched_source})` : ''}` : null
     lines.push(`| ${mdCell(row.raw_text)} | ${mdCell(food)} | ${cell(row.energy)} | ${cell(row.protein)} | ${cell(row.fat)} | ${cell(row.carbs)} | ${cell(row.fiber)} |`)
   }
   lines.push('', '_Macros are per 100 g._')
+
   if (result.skipped.length) {
     lines.push('', '## Skipped', '')
     for (const s of result.skipped) lines.push(`- ${mdCell(s.raw_text || s.name)} — ${mdCell(s.reason)}`)
   }
+
+  // detailed table last: only items that carry micronutrients beyond the macros
+  const isMacroNutrient = (name: string) => {
+    const lower = name.toLowerCase()
+    return MACROS.some((macro) => lower === macro.name || lower.startsWith(`${macro.name},`))
+  }
+  const withMicros = rows.filter((row) => row.nutrients.some((nutrient) => !isMacroNutrient(nutrient.name)))
+  if (withMicros.length) {
+    const columns = nutrientColumns(withMicros)
+    const header = ['Receipt line', 'Matched food', ...columns.map((c) => `${c.name}${c.unit ? ` (${c.unit})` : ''}`)]
+    lines.push('', '## Nutrient detail', '', '_Per 100 g, items with micronutrients only._', '')
+    lines.push(`| ${header.join(' | ')} |`)
+    lines.push(`|${header.map(() => '---').join('|')}|`)
+    for (const row of withMicros) {
+      const byName = new Map(row.nutrients.map((n) => [n.name.toLowerCase(), n.amount]))
+      const food = row.matched_food ? `${row.matched_food}${row.matched_source ? ` (${row.matched_source})` : ''}` : null
+      const cells = columns.map((c) => {
+        const amount = byName.get(c.name.toLowerCase())
+        return amount == null ? '—' : String(Number(amount.toFixed(Math.abs(amount) >= 100 ? 0 : 2)))
+      })
+      lines.push(`| ${[mdCell(row.raw_text), mdCell(food), ...cells].join(' | ')} |`)
+    }
+  }
+
   return lines.join('\n') + '\n'
 }
 
 function buildReceiptText(result: EnrichedReceiptResponse, matches: Record<string, number>): string {
   const r = result.receipt
+  const rows = exportRows(result, matches)
   const lines: string[] = ['RECEIPT SCAN', '']
   if (r) {
     lines.push(`Store: ${r.store ?? '-'}${r.location ? `, ${r.location}` : ''}`)
     lines.push(`Purchased: ${r.purchased_at ?? '-'}${r.timestamp_is_guess ? ' (guessed)' : ''}`)
     lines.push(`Total: ${r.total ?? '-'}${r.currency ? ` ${r.currency}` : ''}`, '')
   }
-  for (const row of exportRows(result, matches)) {
-    const cell = (v: number | null) => (v == null ? '-' : String(Number(v.toFixed(2))))
-    lines.push(`* ${row.raw_text}`)
+  for (const row of rows) {
+    const cell = (v: number | null) => (v == null ? '-' : String(v))
+    lines.push(`* ${row.raw_text.replace(/\s+/g, ' ').trim()}`)
     lines.push(`    matched: ${row.matched_food ?? '-'}${row.matched_source ? ` (${row.matched_source})` : ''}`)
     lines.push(`    per 100 g: energy ${cell(row.energy)} kcal, protein ${cell(row.protein)} g, fat ${cell(row.fat)} g, carbs ${cell(row.carbs)} g, fiber ${cell(row.fiber)} g`)
+    for (const nutrient of row.nutrients) {
+      lines.push(`    - ${formatNutrient(nutrient.name, nutrient.amount, nutrient.unit)}`)
+    }
   }
   if (result.skipped.length) {
     lines.push('', 'SKIPPED')
-    for (const s of result.skipped) lines.push(`* ${s.raw_text || s.name} - ${s.reason}`)
+    for (const s of result.skipped) lines.push(`* ${(s.raw_text || s.name).replace(/\s+/g, ' ').trim()} - ${s.reason.replace(/\s+/g, ' ').trim()}`)
   }
   return lines.join('\n') + '\n'
 }
